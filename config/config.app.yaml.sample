@@ -1,0 +1,88 @@
+# Sample raft library configuration.
+# Every key below is optional; defaults are shown.
+
+dir: /var/lib/raft
+node_id: ""
+bind_addr: ":8081"
+advertise_addr: ""
+advertise_resolve_timeout: 2m
+apply_timeout: 5s
+leader_wait_timeout: 120s
+snapshot_threshold: 1000
+snapshot_interval: 10m
+snapshot_retain: 2
+trailing_logs: 256
+performance_multiplier: 5.0
+raft_log_cache_size: 512
+max_append_entries: 64
+batch_apply_ch: true
+max_entry_size: 1048576
+no_snapshot_restore_on_start: false
+termination_grace_period: 60s
+recovery_mode: false
+single_node_recovery: false
+non_voter: false
+allow_insecure_multi_node: false
+follower_last_contact_max: 15s
+
+discovery:
+  peers: []
+  legacy_peers: []
+  replicas: 1
+  statefulset_name: ""
+  headless_service: ""
+  namespace: ""
+  cluster_domain: cluster.local
+  raft_port: 8081
+
+transport:
+  max_pool: 1
+  timeout: 10s
+  max_dial_retries: 4
+  dial_retry_base: 500ms
+  echo_max_concurrent: 64
+  echo_peek_timeout: 1s
+
+tls:
+  enabled: false
+  dir: ""
+  pki_mode: shared-ca
+  validity: 8760h
+  ca_validity: 262800h
+  safety_margin: 168h
+  organization: raft
+  ca_cert: ""
+  cert: ""
+  key: ""
+  ca_secret: ""
+  ca_bootstrap: false
+  allow_auto_ca_multi_node: false
+  client_auth: true
+  secret_poll_timeout: 120s
+  reload_poll_interval: 5s
+  keyring_rotation_enabled: true
+  rotation_period: 24h
+  rotation_check_interval: 30s
+  extra_sans: []
+
+storage:
+  backend: raft-boltdb
+  bolt_timeout: 1s
+  no_freelist_sync: true
+  initial_mmap_size: 104857600
+  at_rest_key_file: ""
+
+autopilot:
+  enabled: true
+  cleanup_dead_servers: true
+  dead_server_last_contact_threshold: 24h
+  min_quorum: 2
+  stabilization_time: 10s
+  heartbeat_interval: 1s
+
+join:
+  interval: 5s
+  reconcile_timeout: 10s
+  retry_interval: 2s
+  max_concurrent: 20
+  check_peer_resolvable: true

@@ -1,0 +1,47 @@
+name: release
+
+on:
+  push:
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version (vX.Y.Z)"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  ci-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Dagger
+        run: |
+          curl -fsSL https://dl.dagger.io/dagger/install.sh | DAGGER_VERSION=0.21.8 sh
+          sudo mv bin/dagger /usr/local/bin/dagger
+      - name: Run CI pipeline
+        run: dagger call -m ./dagger --src . ci --static=true export --path out
+      - name: Upload verified artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-artifacts
+          path: out/
+
+  human-approval-release:
+    needs: [ci-gate]
+    runs-on: ubuntu-latest
+    environment: production-release
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Dagger
+        run: |
+          curl -fsSL https://dl.dagger.io/dagger/install.sh | DAGGER_VERSION=0.21.8 sh
+          sudo mv bin/dagger /usr/local/bin/dagger
+      - name: Publish release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ github.event.inputs.version || github.ref_name }}"
+          dagger call -m ./dagger --src . release --version "${VERSION}" --github-token env:GITHUB_TOKEN
