@@ -15,6 +15,15 @@ with `logs`, `stable`, `fsm_data`, and `_sys` buckets. Provide
 `storage.AESGCMKeeper` for AES-256-GCM at-rest encryption with key rotation
 and lazy plaintext migration.
 
+At-rest keys can be supplied as a multi-key JSON file (existing behaviour) or
+derived from a single secret/passphrase with RFC 5869 HKDF-SHA256
+(`storage.DeriveAESGCMKey`, `storage.DeriveAESGCMKeeper`,
+`storage.LoadOrDeriveAESGCMKeeper`). The default domain-separation info is
+`raft-at-rest-aes-256-gcm-v1`; secrets shorter than 16 bytes are rejected.
+`Node.Start` automatically initializes the sealer from
+`storage.at_rest_key_file` or `storage.at_rest_key` when no sealer is
+injected.
+
 ## Consequences
 Consumers choose RAM-speed reads or disk-backed KV storage. Single-file
 backups are atomic. `go-raftchunking` and `raft-wal` remain out of scope for

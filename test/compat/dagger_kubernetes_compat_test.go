@@ -22,6 +22,7 @@ import (
 	"github.com/disaster37/raft/httpext"
 	"github.com/disaster37/raft/k8s"
 	"github.com/disaster37/raft/observ"
+	"github.com/disaster37/raft/storage"
 	"github.com/disaster37/raft/testutil"
 )
 
@@ -90,6 +91,7 @@ func TestDaggerKubernetesCompat(t *testing.T) {
 	ln := testutil.FreeListener(t)
 	addr := testutil.FreeAddrFromListener(t, ln)
 	nodeCfg := config.DefaultConfig()
+	nodeCfg.PerformanceMultiplier = 0.2
 	nodeCfg.Dir = t.TempDir()
 	nodeCfg.NodeID = "node-0"
 	nodeCfg.BindAddr = addr
@@ -139,11 +141,54 @@ func TestDaggerKubernetesCompat(t *testing.T) {
 	if rec.Body.String() != "leader" {
 		t.Fatalf("forward body = %q", rec.Body.String())
 	}
+
+	// HKDF at-rest sealer from a raw passphrase.
+	keeper, err := storage.DeriveAESGCMKeeper([]byte("0123456789abcdef"), storage.DefaultHKDFInfo, storage.DefaultHKDFInfo)
+	if err != nil {
+		t.Fatalf("derive keeper: %v", err)
+	}
+	sealed, err := keeper.SealString("secret")
+	if err != nil {
+		t.Fatalf("seal: %v", err)
+	}
+	if opened, err := keeper.OpenString(sealed); err != nil || opened != "secret" {
+		t.Fatalf("open = %q err=%v", opened, err)
+	}
+
+	// Framework-agnostic forwarder and probe helpers used by Hertz handlers.
+	fwd := httpext.NewForwarder(httpext.LeaderForwardConfig{
+		LeaderInfo: fakeLeader{addr: leader.Listener.Addr().String()},
+		TargetPort: port,
+		Scheme:     "http",
+	})
+	if !fwd.ShouldForward(http.MethodPost, "/api/v1/traces", "") {
+		t.Fatal("POST should forward")
+	}
+	if fwd.ShouldForward(http.MethodGet, "/api/v1/traces", "") {
+		t.Fatal("GET should not forward")
+	}
+	if code, body := httpext.ReadyzStatus(fakeReadiness{clean: true}); code != http.StatusOK || body != "ok" {
+		t.Fatalf("readyz = %d %q", code, body)
+	}
+	if code, _ := httpext.StartupStatus(fakeReadiness{}); code != http.StatusServiceUnavailable {
+		t.Fatalf("startup = %d", code)
+	}
+	if code, body := httpext.LivezStatus(); code != http.StatusOK || body != "ok" {
+		t.Fatalf("livez = %d %q", code, body)
+	}
 }
 
 type fakeLeader struct {
 	addr string
 }
+
+type fakeReadiness struct {
+	clean   bool
+	started bool
+}
+
+func (f fakeReadiness) IsCleanState() bool { return f.clean }
+func (f fakeReadiness) IsStarted() bool    { return f.started }
 
 func (f fakeLeader) IsLeader() bool        { return false }
 func (f fakeLeader) LeaderAddress() string { return f.addr }

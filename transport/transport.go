@@ -103,7 +103,8 @@ func NewStreamTransport(opts TransportOptions) (hraft.Transport, io.Closer, stri
 		tlsLayer := newTLSStreamLayerFromListener(ln, advertise, opts.TLSProvider)
 		stream = NewRetryingStreamLayer(tlsLayer, opts.TLSProvider, opts.Timeout, opts.MaxDialRetries, opts.DialRetryBackoff, opts.Metrics)
 	} else {
-		stream = newPlainStreamLayerFromListener(ln, advertise)
+		plainLayer := newPlainStreamLayerFromListener(ln, advertise)
+		stream = NewRetryingStreamLayer(plainLayer, nil, opts.Timeout, opts.MaxDialRetries, opts.DialRetryBackoff, opts.Metrics)
 	}
 
 	transport := hraft.NewNetworkTransportWithConfig(&hraft.NetworkTransportConfig{

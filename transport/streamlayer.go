@@ -22,6 +22,19 @@ type IdleCloser interface {
 	CloseIdleConnections()
 }
 
+// trackedConn removes itself from its stream layer's connection map when
+// closed, preventing unbounded growth of the tracking map (CWE-400).
+type trackedConn struct {
+	net.Conn
+	closeOnce sync.Once
+	onClose   func()
+}
+
+func (c *trackedConn) Close() error {
+	c.closeOnce.Do(c.onClose)
+	return c.Conn.Close()
+}
+
 // PlainStreamLayer is a plaintext TCP Raft stream layer.
 type PlainStreamLayer struct {
 	listener  net.Listener
@@ -53,8 +66,7 @@ func (l *PlainStreamLayer) Accept() (net.Conn, error) {
 	if err != nil {
 		return nil, err
 	}
-	l.track(conn)
-	return conn, nil
+	return l.track(conn), nil
 }
 
 func (l *PlainStreamLayer) Dial(addr hraft.ServerAddress, timeout time.Duration) (net.Conn, error) {
@@ -62,8 +74,7 @@ func (l *PlainStreamLayer) Dial(addr hraft.ServerAddress, timeout time.Duration)
 	if err != nil {
 		return nil, err
 	}
-	l.track(conn)
-	return conn, nil
+	return l.track(conn), nil
 }
 
 func (l *PlainStreamLayer) Close() error {
@@ -73,20 +84,34 @@ func (l *PlainStreamLayer) Close() error {
 
 func (l *PlainStreamLayer) Addr() net.Addr { return l.advertise }
 
-// CloseIdleConnections closes every tracked connection.
+// CloseIdleConnections closes every tracked connection. Connections are
+// closed outside the lock because trackedConn.Close calls untrack.
 func (l *PlainStreamLayer) CloseIdleConnections() {
 	l.mu.Lock()
-	defer l.mu.Unlock()
+	conns := make([]net.Conn, 0, len(l.conns))
 	for conn := range l.conns {
-		_ = conn.Close()
+		conns = append(conns, conn)
 	}
 	l.conns = map[net.Conn]struct{}{}
+	l.mu.Unlock()
+	for _, conn := range conns {
+		_ = conn.Close()
+	}
 }
 
-func (l *PlainStreamLayer) track(conn net.Conn) {
+func (l *PlainStreamLayer) track(conn net.Conn) net.Conn {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	l.conns[conn] = struct{}{}
+	tracked := &trackedConn{Conn: conn}
+	tracked.onClose = func() { l.untrack(tracked) }
+	l.conns[tracked] = struct{}{}
+	return tracked
+}
+
+func (l *PlainStreamLayer) untrack(conn net.Conn) {
+	l.mu.Lock()
+	delete(l.conns, conn)
+	l.mu.Unlock()
 }
 
 // TLSStreamLayer is an mTLS Raft stream layer backed by a DynamicTLSProvider.
@@ -122,8 +147,7 @@ func (l *TLSStreamLayer) Accept() (net.Conn, error) {
 		return nil, err
 	}
 	tlsConn := tls.Server(conn, l.provider.ServerTLSConfig())
-	l.track(tlsConn)
-	return tlsConn, nil
+	return l.track(tlsConn), nil
 }
 
 func (l *TLSStreamLayer) Dial(addr hraft.ServerAddress, timeout time.Duration) (net.Conn, error) {
@@ -136,8 +160,7 @@ func (l *TLSStreamLayer) Dial(addr hraft.ServerAddress, timeout time.Duration) (
 	if err != nil {
 		return nil, err
 	}
-	l.track(conn)
-	return conn, nil
+	return l.track(conn), nil
 }
 
 func (l *TLSStreamLayer) Close() error {
@@ -147,20 +170,34 @@ func (l *TLSStreamLayer) Close() error {
 
 func (l *TLSStreamLayer) Addr() net.Addr { return l.advertise }
 
-// CloseIdleConnections closes every tracked connection.
+// CloseIdleConnections closes every tracked connection. Connections are
+// closed outside the lock because trackedConn.Close calls untrack.
 func (l *TLSStreamLayer) CloseIdleConnections() {
 	l.mu.Lock()
-	defer l.mu.Unlock()
+	conns := make([]net.Conn, 0, len(l.conns))
 	for conn := range l.conns {
-		_ = conn.Close()
+		conns = append(conns, conn)
 	}
 	l.conns = map[net.Conn]struct{}{}
+	l.mu.Unlock()
+	for _, conn := range conns {
+		_ = conn.Close()
+	}
 }
 
-func (l *TLSStreamLayer) track(conn net.Conn) {
+func (l *TLSStreamLayer) track(conn net.Conn) net.Conn {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	l.conns[conn] = struct{}{}
+	tracked := &trackedConn{Conn: conn}
+	tracked.onClose = func() { l.untrack(tracked) }
+	l.conns[tracked] = struct{}{}
+	return tracked
+}
+
+func (l *TLSStreamLayer) untrack(conn net.Conn) {
+	l.mu.Lock()
+	delete(l.conns, conn)
+	l.mu.Unlock()
 }
 
 // RetryingStreamLayer re-resolves DNS before every dial and retries on
@@ -205,9 +242,6 @@ func NewRetryingStreamLayer(inner hraft.StreamLayer, provider *DynamicTLSProvide
 }
 
 func (l *RetryingStreamLayer) Dial(addr hraft.ServerAddress, timeout time.Duration) (net.Conn, error) {
-	if l.provider == nil {
-		return l.inner.Dial(addr, timeout)
-	}
 	host, port, err := net.SplitHostPort(string(addr))
 	if err != nil {
 		return nil, fmt.Errorf("parse dial addr %q: %w", addr, err)
@@ -239,10 +273,15 @@ func (l *RetryingStreamLayer) Dial(addr hraft.ServerAddress, timeout time.Durati
 		}
 		for _, ip := range ips {
 			target := net.JoinHostPort(ip, port)
-			conn, dialErr := tls.DialWithDialer(dialer, "tcp", target, l.provider.DialTLSConfig(host))
+			var conn net.Conn
+			var dialErr error
+			if l.provider != nil {
+				conn, dialErr = tls.DialWithDialer(dialer, "tcp", target, l.provider.DialTLSConfig(host))
+			} else {
+				conn, dialErr = dialer.Dial("tcp", target)
+			}
 			if dialErr == nil {
-				l.track(conn)
-				return conn, nil
+				return l.track(conn), nil
 			}
 			lastErr = dialErr
 			if !netutil.IsConnRefused(dialErr) {
@@ -260,20 +299,37 @@ func (l *RetryingStreamLayer) Close() error {
 }
 func (l *RetryingStreamLayer) Addr() net.Addr { return l.inner.Addr() }
 
-// CloseIdleConnections closes every tracked connection.
+// CloseIdleConnections closes every tracked connection and cascades to the
+// inner stream layer so accepted server-side connections are also closed.
 func (l *RetryingStreamLayer) CloseIdleConnections() {
 	l.mu.Lock()
-	defer l.mu.Unlock()
+	conns := make([]net.Conn, 0, len(l.conns))
 	for conn := range l.conns {
-		_ = conn.Close()
+		conns = append(conns, conn)
 	}
 	l.conns = map[net.Conn]struct{}{}
+	l.mu.Unlock()
+	for _, conn := range conns {
+		_ = conn.Close()
+	}
+	if inner, ok := l.inner.(IdleCloser); ok {
+		inner.CloseIdleConnections()
+	}
 }
 
-func (l *RetryingStreamLayer) track(conn net.Conn) {
+func (l *RetryingStreamLayer) track(conn net.Conn) net.Conn {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	l.conns[conn] = struct{}{}
+	tracked := &trackedConn{Conn: conn}
+	tracked.onClose = func() { l.untrack(tracked) }
+	l.conns[tracked] = struct{}{}
+	return tracked
+}
+
+func (l *RetryingStreamLayer) untrack(conn net.Conn) {
+	l.mu.Lock()
+	delete(l.conns, conn)
+	l.mu.Unlock()
 }
 
 // EchoMagic is the 4-byte prefix used to multiplex follower echo connections

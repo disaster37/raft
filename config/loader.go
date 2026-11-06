@@ -109,7 +109,7 @@ func ParseExtendedDuration(s string) (time.Duration, error) {
 			}
 			total += time.Duration(f * float64(unitDur))
 		default:
-			d, err := time.ParseDuration(num + unit)
+			d, err := time.ParseDuration(fmt.Sprintf("%s%s", num, unit))
 			if err != nil {
 				return 0, err
 			}
@@ -152,7 +152,7 @@ func readRawConfig(configFile string) map[string]any {
 		return nil
 	}
 	//nolint:gosec // configFile is an intentional user-provided path
-	raw, err := os.ReadFile(configFile)
+	raw, err := os.ReadFile(configFile) // #nosec G304
 	if err != nil {
 		return nil
 	}
@@ -213,10 +213,11 @@ func insertSetting(v *viper.Viper, dst map[string]any, key string, val any, rawC
 				curRaw = nil
 			}
 		}
-		if prefix != "" {
-			prefix += "."
+		if prefix == "" {
+			prefix = keyPart
+		} else {
+			prefix = fmt.Sprintf("%s.%s", prefix, keyPart)
 		}
-		prefix += keyPart
 		i += len(consumed)
 	}
 }

@@ -1,6 +1,7 @@
 package fsm
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -202,6 +203,9 @@ func (f *BoltKVFSM) ListPrefix(bucket, prefix string) (map[string][]byte, error)
 		}
 		c := b.Cursor()
 		for k, v := c.Seek(compositePrefix); k != nil && strings.HasPrefix(string(k), string(compositePrefix)); k, v = c.Next() {
+			if bucket == "" && bytes.IndexByte(k, 0) >= 0 {
+				continue
+			}
 			value := make([]byte, len(v))
 			copy(value, v)
 			out[stripBucket(bucket, string(k))] = value

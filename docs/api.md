@@ -54,6 +54,8 @@ regenerate the full reference.
 - `Backend`, `OpenBackend`, `NewInmemBackend`, `ClearRaftState`, `LoadOrGenerateNodeID`
 - `BoltStore`, `SharedBoltStore`, `NewSecureFileSnapshotStore`, `SnapshotDelayStore`
 - `EncryptedValue`, `Sealer`, `AESGCMKeeper`, `LoadAESGCMKeeper`, `NewAESGCMKeeper`, `GenerateKeyFile`
+- `DefaultHKDFInfo`, `DefaultDerivedKeyID`, `MinSecretLength`, `ErrSecretTooShort`
+- `DeriveAESGCMKey`, `DeriveAESGCMKeeper`, `LoadOrDeriveAESGCMKeeper`
 
 ## Package `fsm`
 
@@ -76,13 +78,18 @@ regenerate the full reference.
 
 ## Package `observ`
 
-- `Logger`, `NewLogrusAdapter`, `NewNoopLogger`, `NewHclogWriter`
+- `Logger`, `NewLogrusAdapter`, `NewStdlibAdapter`, `NewNoopLogger`, `NewHclogWriter`
+- `StdlibAdapter`
 - `MetricsCollector`, `NewPrometheusMetrics`, `NewNoopMetrics`
 
 ## Package `httpext`
 
 - `ReadinessChecker`, `LeaderInfo`
+- `ReadyzStatus`, `StartupStatus`, `LivezStatus`
 - `ReadyzHandler`, `StartupHandler`, `LivezHandler`
+- `DefaultForwardHeader`, `ErrNoLeader`, `ErrInvalidLeaderAddr`
+- `ForwardRequest`, `ForwardResponse`, `Forwarder`, `NewForwarder`, `NewForwardHTTPClient`
+- `HopByHopHeaders`, `IsHopByHopHeader`
 - `LeaderForwardConfig`, `StripForwardMarker`, `LeaderForwardMiddleware`
 
 ## Package `testutil`

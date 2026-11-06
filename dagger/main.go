@@ -10,9 +10,9 @@ import (
 
 const (
 	golangImage         = "golang:1.27-bookworm"
-	golangciLintVersion = "v2.12.2"
-	govulncheckVersion  = "v1.1.4"
-	gosecVersion        = "v2.22.2"
+	golangciLintVersion = "v2.14.0"
+	govulncheckVersion  = "v1.9.0"
+	gosecVersion        = "v2.30.0"
 	gomarkdocVersion    = "v1.1.0"
 )
 
@@ -77,16 +77,48 @@ func (m *Raft) Coverage(ctx context.Context, minTotal float64) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	out, err := m.base().WithFile("coverage.out", file).WithExec([]string{"sh", "-c", "grep -v '/examples/' coverage.out | grep -v '/test/' > coverage.filtered.out && go tool cover -func=coverage.filtered.out | tail -1"}).Stdout(ctx)
+	return m.checkCoverageFile(ctx, file, minTotal)
+}
+
+func (m *Raft) checkCoverageFile(ctx context.Context, coverage *dagger.File, minTotal float64) (string, error) {
+	script := `grep -v '/examples/' coverage.out | grep -v '/test/' > coverage.filtered.out
+go tool cover -func=coverage.filtered.out | tail -1
+awk 'NR>1 { split($1,a,":"); file=a[1]; n=split(file,parts,"/"); pkg=parts[n-1]; stmts=$2; count=$3; total[pkg]+=stmts; if (count+0>0) covered[pkg]+=stmts } END { for (pkg in total) printf "pkg %s %.1f\n", pkg, 100*covered[pkg]/total[pkg] }' coverage.filtered.out`
+	out, err := m.base().WithFile("coverage.out", coverage).WithExec([]string{"sh", "-c", script}).Stdout(ctx)
 	if err != nil {
 		return "", err
 	}
 	var total float64
-	if _, err := fmt.Sscanf(strings.TrimSpace(out), "total:\t(statements)\t%f%%", &total); err != nil {
-		return "", fmt.Errorf("parse coverage: %w", err)
+	required := map[string]float64{"config": 95.0, "discovery": 95.0, "keyring": 95.0}
+	found := map[string]float64{}
+	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		if strings.HasPrefix(line, "total:") {
+			if _, err := fmt.Sscanf(line, "total:\t(statements)\t%f%%", &total); err != nil {
+				return "", fmt.Errorf("parse coverage: %w", err)
+			}
+			continue
+		}
+		var pkg string
+		var pct float64
+		if _, err := fmt.Sscanf(line, "pkg %s %f", &pkg, &pct); err == nil {
+			found[pkg] = pct
+		}
 	}
 	if total < minTotal {
 		return "", fmt.Errorf("coverage %.1f%% is below %.1f%%", total, minTotal)
+	}
+	for pkg, min := range required {
+		pct, ok := found[pkg]
+		if !ok {
+			return "", fmt.Errorf("coverage for package %s not found", pkg)
+		}
+		if pct < min {
+			return "", fmt.Errorf("coverage for package %s is %.1f%% (below %.1f%%)", pkg, pct, min)
+		}
 	}
 	return out, nil
 }
@@ -105,14 +137,15 @@ func (m *Raft) Build(ctx context.Context, static bool) (*dagger.Directory, error
 
 // Docs generates docs/api.md with gomarkdoc.
 func (m *Raft) Docs(ctx context.Context, check bool) (*dagger.File, error) {
-	cmd := fmt.Sprintf("go install github.com/princjef/gomarkdoc/cmd/gomarkdoc@%s && gomarkdoc ./... --output docs/api.md", gomarkdocVersion)
+	cmd := fmt.Sprintf("go install github.com/princjef/gomarkdoc/cmd/gomarkdoc@%s && gomarkdoc ./... --exclude-dirs ./test/... --output docs/api.md", gomarkdocVersion)
 	if check {
-		cmd = fmt.Sprintf("go install github.com/princjef/gomarkdoc/cmd/gomarkdoc@%s && gomarkdoc ./... --check", gomarkdocVersion)
+		cmd = fmt.Sprintf("go install github.com/princjef/gomarkdoc/cmd/gomarkdoc@%s && gomarkdoc ./... --exclude-dirs ./test/... --output docs/api.md --check", gomarkdocVersion)
 	}
-	if _, err := m.base().WithExec([]string{"sh", "-c", cmd}).Sync(ctx); err != nil {
+	ctr, err := m.base().WithExec([]string{"sh", "-c", cmd}).Sync(ctx)
+	if err != nil {
 		return nil, err
 	}
-	return m.base().File("docs/api.md"), nil
+	return ctr.File("docs/api.md"), nil
 }
 
 // Ci runs the full CI pipeline.
@@ -129,7 +162,11 @@ func (m *Raft) Ci(ctx context.Context, static bool) (*dagger.Directory, error) {
 	if _, err := m.Gosec(ctx); err != nil {
 		return nil, err
 	}
-	if _, err := m.Coverage(ctx, 90.0); err != nil {
+	coverage, err := m.TestRace(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := m.checkCoverageFile(ctx, coverage, 90.0); err != nil {
 		return nil, err
 	}
 	bin, err := m.Build(ctx, static)
@@ -137,10 +174,6 @@ func (m *Raft) Ci(ctx context.Context, static bool) (*dagger.Directory, error) {
 		return nil, err
 	}
 	docs, err := m.Docs(ctx, false)
-	if err != nil {
-		return nil, err
-	}
-	coverage, err := m.TestRace(ctx)
 	if err != nil {
 		return nil, err
 	}

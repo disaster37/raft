@@ -3,10 +3,12 @@ package fsm
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"io"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -526,5 +528,64 @@ func TestKVFSMInvalidPayloads(t *testing.T) {
 	}
 	if err := mem.Restore(io.NopCloser(bytes.NewReader([]byte("null")))); err != nil {
 		t.Fatalf("null restore: %v", err)
+	}
+}
+
+func TestEnvelopeFSMRestoreRejectsOversizedHeader(t *testing.T) {
+	env := NewEnvelopeFSM(NewMemoryKVFSM(nil), nil, nil, nil)
+	var buf bytes.Buffer
+	buf.Write(snapshotMagic)
+	var lenBuf [4]byte
+	binary.BigEndian.PutUint32(lenBuf[:], maxSnapshotHeaderSize+1)
+	buf.Write(lenBuf[:])
+	err := env.Restore(io.NopCloser(bytes.NewReader(buf.Bytes())))
+	if err == nil {
+		t.Fatal("expected oversized header error")
+	}
+	if !strings.Contains(err.Error(), "exceeds max") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestBoltKVFSMListPrefixEmptyBucketIsolation(t *testing.T) {
+	dir := t.TempDir()
+	db, err := bolt.Open(filepath.Join(dir, "fsm.db"), 0o600, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	kv := NewBoltKVFSM(db)
+	apply := func(entry KVEntry) {
+		data, err := (CommandCodec{}).Encode(KindSet, entry)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if resp := kv.Apply(&hraft.Log{Data: data}); resp != nil {
+			t.Fatalf("apply resp = %v", resp)
+		}
+	}
+	apply(KVEntry{Bucket: "users", Key: "u1", Value: []byte("named")})
+	apply(KVEntry{Bucket: "", Key: "root", Value: []byte("root")})
+
+	all, err := kv.ListPrefix("", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(all) != 1 || string(all["root"]) != "root" {
+		t.Fatalf("empty bucket list = %v", all)
+	}
+	prefixed, err := kv.ListPrefix("", "u")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(prefixed) != 0 {
+		t.Fatalf("empty bucket prefix leaked named bucket keys: %v", prefixed)
+	}
+	named, err := kv.ListPrefix("users", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(named) != 1 || string(named["u1"]) != "named" {
+		t.Fatalf("named bucket list = %v", named)
 	}
 }

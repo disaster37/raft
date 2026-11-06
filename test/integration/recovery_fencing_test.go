@@ -45,7 +45,7 @@ func startNode(t *testing.T, dir, id string, peers []config.PeerConfig, singleNo
 	cfg.SingleNodeRecovery = singleNodeRecovery
 	cfg.Autopilot.Enabled = false
 	cfg.Join.Interval = 100 * time.Millisecond
-	cfg.PerformanceMultiplier = 1.0
+	cfg.PerformanceMultiplier = 0.2
 	n, err := raft.NewNode(context.Background(), &cfg, raft.NodeOptions{
 		CustomListener:   ln,
 		GenerationFencer: fencer,
@@ -126,7 +126,7 @@ func TestGenerationFencingWipesStalePVC(t *testing.T) {
 	cfgA.Storage.Backend = config.StorageBackendRaftBoltDB
 	cfgA.Autopilot.Enabled = false
 	cfgA.Join.Interval = time.Hour
-	cfgA.PerformanceMultiplier = 1.0
+	cfgA.PerformanceMultiplier = 0.2
 	fencer := &fakeFencer{}
 	a, err := raft.NewNode(context.Background(), &cfgA, raft.NodeOptions{CustomListener: lnA, GenerationFencer: fencer, Logger: discardLogger()})
 	if err != nil {
@@ -152,7 +152,7 @@ func TestGenerationFencingWipesStalePVC(t *testing.T) {
 	cfgB.Storage.Backend = config.StorageBackendRaftBoltDB
 	cfgB.Autopilot.Enabled = false
 	cfgB.Join.Interval = time.Hour
-	cfgB.PerformanceMultiplier = 1.0
+	cfgB.PerformanceMultiplier = 0.2
 	fencer.gen = 1
 	b, err := raft.NewNode(context.Background(), &cfgB, raft.NodeOptions{CustomListener: lnB, GenerationFencer: fencer, Logger: discardLogger()})
 	if err != nil {
