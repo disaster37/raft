@@ -71,6 +71,8 @@ storage:
   no_freelist_sync: true
   initial_mmap_size: 104857600
   at_rest_key_file: ""
+  at_rest_key: ""
+  at_rest_key_info: raft-at-rest-aes-256-gcm-v1
 
 autopilot:
   enabled: true

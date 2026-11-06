@@ -50,7 +50,7 @@ func NewTestCluster(t *testing.T, count int, tlsEnabled bool) *TestCluster {
 		cfg.Discovery.Replicas = count
 		cfg.AllowInsecureMultiNode = true
 		cfg.Storage.Backend = config.StorageBackendInmem
-		cfg.PerformanceMultiplier = 1.0
+		cfg.PerformanceMultiplier = 0.2
 		cfg.ApplyTimeout = 5 * time.Second
 		cfg.Join.Interval = 100 * time.Millisecond
 		cfg.Join.ReconcileTimeout = 2 * time.Second

@@ -306,6 +306,7 @@ func (n *Node) LeaveCluster(ctx context.Context, timeout time.Duration) error {
 	if otherVoters == 0 {
 		return nil
 	}
+	n.wasMember.Store(true)
 	if err := n.RemoveServer(n.nodeID, timeout); err != nil {
 		return fmt.Errorf("leave cluster: %w", err)
 	}

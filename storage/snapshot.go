@@ -22,7 +22,7 @@ func NewSecureFileSnapshotStore(dir string, retain int, logOutput io.Writer) (hr
 	}
 	snapDir := filepath.Join(dir, "snapshots")
 	//nolint:gosec // snapshot directory permissions are intentionally 0700
-	if err := os.Chmod(snapDir, 0o700); err != nil && !os.IsNotExist(err) {
+	if err := os.Chmod(snapDir, 0o700); err != nil && !os.IsNotExist(err) { // #nosec G302
 		return nil, fmt.Errorf("chmod snapshots dir: %w", err)
 	}
 	return store, nil

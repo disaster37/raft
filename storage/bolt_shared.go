@@ -42,10 +42,7 @@ func NewSharedBoltStore(dir, nodeID string, cfg config.StorageConfig, snapRetain
 		nodeID = "raft"
 	}
 	path := filepath.Join(dir, fmt.Sprintf("%s.db", nodeID))
-	opts := &bolt.Options{Timeout: cfg.BoltTimeout}
-	if opts.Timeout <= 0 {
-		opts.Timeout = defaultBoltOptions(cfg).BoltOptions.Timeout
-	}
+	opts := defaultBoltOptions(cfg).BoltOptions
 	db, err := bolt.Open(path, 0o600, opts)
 	if err != nil {
 		return nil, fmt.Errorf("open shared bolt db: %w", err)
@@ -269,19 +266,19 @@ func itob(v uint64) []byte {
 	b := make([]byte, 8)
 	b[0] = byte(v >> 56)
 	//nolint:gosec // explicit big-endian byte extraction
-	b[1] = byte(v >> 48)
+	b[1] = byte(v >> 48) // #nosec G115
 	//nolint:gosec // explicit big-endian byte extraction
-	b[2] = byte(v >> 40)
+	b[2] = byte(v >> 40) // #nosec G115
 	//nolint:gosec // explicit big-endian byte extraction
-	b[3] = byte(v >> 32)
+	b[3] = byte(v >> 32) // #nosec G115
 	//nolint:gosec // explicit big-endian byte extraction
-	b[4] = byte(v >> 24)
+	b[4] = byte(v >> 24) // #nosec G115
 	//nolint:gosec // explicit big-endian byte extraction
-	b[5] = byte(v >> 16)
+	b[5] = byte(v >> 16) // #nosec G115
 	//nolint:gosec // explicit big-endian byte extraction
-	b[6] = byte(v >> 8)
+	b[6] = byte(v >> 8) // #nosec G115
 	//nolint:gosec // explicit big-endian byte extraction
-	b[7] = byte(v)
+	b[7] = byte(v) // #nosec G115
 	return b
 }
 

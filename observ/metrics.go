@@ -152,21 +152,39 @@ func NewPrometheusMetrics(reg prometheus.Registerer) *PrometheusMetrics {
 			Help: "Total number of TLS keyring rotations by status.",
 		}, []string{"status"}),
 	}
-	for _, c := range []prometheus.Collector{
-		m.state, m.term, m.lastLogIndex, m.commitIndex, m.appliedIndex,
-		m.fsmPending, m.numPeers, m.leaderChanges, m.joinAttempts,
-		m.joinFailures, m.dnsFailures, m.dialRetries, m.leadershipTransfer,
-		m.deadServers, m.followerHeartbeat, m.appliedIndexDelta, m.keyringTerm,
-		m.keyringActiveAge, m.keyringRotations,
-	} {
-		if err := reg.Register(c); err != nil {
-			var already prometheus.AlreadyRegisteredError
-			if !errors.As(err, &already) {
-				panic(err)
+	m.state = registerCollector(reg, m.state)
+	m.term = registerCollector(reg, m.term)
+	m.lastLogIndex = registerCollector(reg, m.lastLogIndex)
+	m.commitIndex = registerCollector(reg, m.commitIndex)
+	m.appliedIndex = registerCollector(reg, m.appliedIndex)
+	m.fsmPending = registerCollector(reg, m.fsmPending)
+	m.numPeers = registerCollector(reg, m.numPeers)
+	m.leaderChanges = registerCollector(reg, m.leaderChanges)
+	m.joinAttempts = registerCollector(reg, m.joinAttempts)
+	m.joinFailures = registerCollector(reg, m.joinFailures)
+	m.dnsFailures = registerCollector(reg, m.dnsFailures)
+	m.dialRetries = registerCollector(reg, m.dialRetries)
+	m.leadershipTransfer = registerCollector(reg, m.leadershipTransfer)
+	m.deadServers = registerCollector(reg, m.deadServers)
+	m.followerHeartbeat = registerCollector(reg, m.followerHeartbeat)
+	m.appliedIndexDelta = registerCollector(reg, m.appliedIndexDelta)
+	m.keyringTerm = registerCollector(reg, m.keyringTerm)
+	m.keyringActiveAge = registerCollector(reg, m.keyringActiveAge)
+	m.keyringRotations = registerCollector(reg, m.keyringRotations)
+	return m
+}
+
+func registerCollector[T prometheus.Collector](reg prometheus.Registerer, c T) T {
+	if err := reg.Register(c); err != nil {
+		var already prometheus.AlreadyRegisteredError
+		if errors.As(err, &already) {
+			if existing, ok := already.ExistingCollector.(T); ok {
+				return existing
 			}
 		}
+		panic(err)
 	}
-	return m
+	return c
 }
 
 // UpdateFromRaftStats updates gauges from raft.Stats().

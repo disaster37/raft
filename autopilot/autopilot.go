@@ -83,7 +83,10 @@ func (a *Autopilot) Start(ctx context.Context) {
 	cleanupTicker := time.NewTicker(30 * time.Second)
 	defer cleanupTicker.Stop()
 
-	isLeader := false
+	isLeader := a.r != nil && a.r.State() == hraft.Leader
+	if isLeader {
+		a.stabilize()
+	}
 	for {
 		select {
 		case <-ctx.Done():
@@ -92,11 +95,19 @@ func (a *Autopilot) Start(ctx context.Context) {
 			if !ok {
 				return
 			}
+			if leader != isLeader {
+				a.metrics.IncLeaderChanges()
+			}
 			isLeader = leader
 			if isLeader {
 				a.stabilize()
 			}
 		case <-heartbeatTicker.C:
+			if !isLeader && a.r != nil && a.r.State() == hraft.Leader {
+				isLeader = true
+				a.metrics.IncLeaderChanges()
+				a.stabilize()
+			}
 			if isLeader {
 				a.heartbeatTracker()
 			}
@@ -125,7 +136,7 @@ func (a *Autopilot) RecordEcho(u EchoUpdate) {
 	}
 	if state.AppliedIndex > 0 {
 		//nolint:gosec // applied indexes are monotonic and fit in int64 for practical clusters
-		state.AppliedIndexDelta = int64(u.AppliedIndex) - int64(state.AppliedIndex)
+		state.AppliedIndexDelta = int64(u.AppliedIndex) - int64(state.AppliedIndex) // #nosec G115
 	}
 	state.AppliedIndex = u.AppliedIndex
 	state.Term = u.Term
@@ -265,6 +276,7 @@ func (a *Autopilot) heartbeatTracker() {
 	if a.r == nil {
 		return
 	}
+	a.metrics.UpdateFromRaftStats(a.r.Stats())
 	cfgFuture := a.r.GetConfiguration()
 	if err := cfgFuture.Error(); err != nil {
 		return
@@ -291,7 +303,11 @@ func (a *Autopilot) heartbeatTracker() {
 			a.followers[srv.ID] = state
 		}
 		state.Address = srv.Address
-		a.metrics.ObserveFollowerHeartbeat(string(srv.ID), 0)
+		ageMs := float64(now.Sub(state.LastHeartbeat).Milliseconds())
+		if ageMs < 0 {
+			ageMs = 0
+		}
+		a.metrics.ObserveFollowerHeartbeat(string(srv.ID), ageMs)
 	}
 	for id, state := range a.followers {
 		if !currentVoters[id] {

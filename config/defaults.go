@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/spf13/viper"
@@ -78,6 +79,8 @@ func DefaultConfig() Config {
 			NoFreelistSync:  true,
 			InitialMmapSize: 100 * 1024 * 1024,
 			AtRestKeyFile:   "",
+			AtRestKey:       "",
+			AtRestKeyInfo:   "raft-at-rest-aes-256-gcm-v1",
 		},
 		Autopilot: AutopilotConfig{
 			Enabled:                        true,
@@ -216,6 +219,9 @@ func ApplyDefaults(cfg *Config) {
 	if cfg.Storage.InitialMmapSize == 0 {
 		cfg.Storage.InitialMmapSize = d.Storage.InitialMmapSize
 	}
+	if cfg.Storage.AtRestKeyInfo == "" {
+		cfg.Storage.AtRestKeyInfo = d.Storage.AtRestKeyInfo
+	}
 
 	if cfg.Autopilot.DeadServerLastContactThreshold == 0 {
 		cfg.Autopilot.DeadServerLastContactThreshold = d.Autopilot.DeadServerLastContactThreshold
@@ -255,7 +261,7 @@ func RegisterViperDefaults(v *viper.Viper, prefix string) {
 		if prefix == "" {
 			return k
 		}
-		return prefix + "." + k
+		return fmt.Sprintf("%s.%s", prefix, k)
 	}
 	v.SetDefault(key("dir"), d.Dir)
 	v.SetDefault(key("node_id"), d.NodeID)
@@ -323,6 +329,8 @@ func RegisterViperDefaults(v *viper.Viper, prefix string) {
 	v.SetDefault(key("storage.no_freelist_sync"), d.Storage.NoFreelistSync)
 	v.SetDefault(key("storage.initial_mmap_size"), d.Storage.InitialMmapSize)
 	v.SetDefault(key("storage.at_rest_key_file"), d.Storage.AtRestKeyFile)
+	v.SetDefault(key("storage.at_rest_key"), d.Storage.AtRestKey)
+	v.SetDefault(key("storage.at_rest_key_info"), d.Storage.AtRestKeyInfo)
 
 	v.SetDefault(key("autopilot.enabled"), d.Autopilot.Enabled)
 	v.SetDefault(key("autopilot.cleanup_dead_servers"), d.Autopilot.CleanupDeadServers)

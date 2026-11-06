@@ -81,7 +81,7 @@ func ParseLegacyPeers(entries []string) []Peer {
 
 // PodOrdinal reports whether host matches "<statefulSet>-<n>" and returns n.
 func PodOrdinal(host, statefulSetName string) (int, bool) {
-	prefix := statefulSetName + "-"
+	prefix := fmt.Sprintf("%s-", statefulSetName)
 	if statefulSetName == "" || !strings.HasPrefix(host, prefix) {
 		return 0, false
 	}
@@ -230,7 +230,7 @@ func loadOrGenerateNodeID(dir string) (string, error) {
 	}
 	path := filepath.Join(dir, "node-id")
 	//nolint:gosec // path is a fixed node-id file under the data dir
-	if b, err := os.ReadFile(path); err == nil {
+	if b, err := os.ReadFile(path); err == nil { // #nosec G304
 		id := strings.TrimSpace(string(b))
 		if id != "" {
 			return id, nil

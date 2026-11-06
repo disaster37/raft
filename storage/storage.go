@@ -129,7 +129,7 @@ func LoadOrGenerateNodeID(dir string) (string, error) {
 	}
 	path := filepath.Join(dir, "node-id")
 	//nolint:gosec // path is a fixed node-id file under the data dir
-	if b, err := os.ReadFile(path); err == nil {
+	if b, err := os.ReadFile(path); err == nil { // #nosec G304
 		id := strings.TrimSpace(string(b))
 		if id != "" {
 			return id, nil

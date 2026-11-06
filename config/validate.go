@@ -23,6 +23,9 @@ func Validate(cfg *Config, hasK8sClient bool) error {
 	default:
 		return fmt.Errorf("storage.backend %q is not supported", cfg.Storage.Backend)
 	}
+	if cfg.Storage.AtRestKey != "" && len(cfg.Storage.AtRestKey) < 16 {
+		return fmt.Errorf("storage.at_rest_key must be at least 16 bytes, got %d", len(cfg.Storage.AtRestKey))
+	}
 	switch cfg.TLS.PKIMode {
 	case PKIModeSharedCA, PKIModeSelfSigned:
 	default:

@@ -3,12 +3,14 @@ package autopilot
 import (
 	"context"
 	"io"
+	"sync"
 	"testing"
 	"time"
 
 	hraft "github.com/hashicorp/raft"
 
 	"github.com/disaster37/raft/config"
+	"github.com/disaster37/raft/observ"
 )
 
 type noopFSM struct{}
@@ -193,3 +195,110 @@ func TestAutopilotStartClosedLeaderCh(t *testing.T) {
 		t.Fatal("autopilot did not stop on closed leader channel")
 	}
 }
+
+type recordingMetrics struct {
+	mu            sync.Mutex
+	statsUpdates  int
+	leaderChanges int
+	heartbeatAges map[string]float64
+}
+
+func (m *recordingMetrics) UpdateFromRaftStats(map[string]string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.statsUpdates++
+}
+
+func (m *recordingMetrics) IncLeaderChanges() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.leaderChanges++
+}
+
+func (m *recordingMetrics) ObserveFollowerHeartbeat(id string, ageMs float64) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.heartbeatAges == nil {
+		m.heartbeatAges = map[string]float64{}
+	}
+	m.heartbeatAges[id] = ageMs
+}
+
+func (m *recordingMetrics) ObserveAppliedIndexDelta(string, float64) {}
+func (m *recordingMetrics) IncJoinAttempts()                         {}
+func (m *recordingMetrics) IncJoinFailures()                         {}
+func (m *recordingMetrics) IncDNSResolutionFailures()                {}
+func (m *recordingMetrics) IncDialRetries()                          {}
+func (m *recordingMetrics) IncLeadershipTransfers()                  {}
+func (m *recordingMetrics) IncDeadServersDetected()                  {}
+func (m *recordingMetrics) SetKeyringTerm(uint64)                    {}
+func (m *recordingMetrics) SetKeyringActiveKeyAgeSeconds(float64)    {}
+func (m *recordingMetrics) IncKeyringRotations(string)               {}
+
+func (m *recordingMetrics) snapshot() (int, int, float64) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.statsUpdates, m.leaderChanges, m.heartbeatAges["local"]
+}
+
+func TestAutopilotMetricsUpdates(t *testing.T) {
+	r := newTestRaft(t)
+	metrics := &recordingMetrics{}
+	leaderCh := make(chan bool, 2)
+	a := New(config.AutopilotConfig{
+		Enabled:                        true,
+		HeartbeatInterval:              5 * time.Millisecond,
+		DeadServerLastContactThreshold: time.Hour,
+		MinQuorum:                      1,
+		StabilizationTime:              time.Millisecond,
+	}, r, "local", leaderCh, nil, metrics)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		a.Start(ctx)
+		close(done)
+	}()
+	leaderCh <- false
+	waitForMetric(t, func() bool {
+		_, changes, _ := metrics.snapshot()
+		return changes >= 1
+	})
+	leaderCh <- true
+	waitForMetric(t, func() bool {
+		_, changes, _ := metrics.snapshot()
+		return changes >= 2
+	})
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("autopilot did not stop")
+	}
+
+	a.mu.Lock()
+	a.followers["local"] = &FollowerState{ID: "local", LastHeartbeat: time.Now().Add(-50 * time.Millisecond), Healthy: true}
+	a.mu.Unlock()
+	a.heartbeatTracker()
+	stats, _, age := metrics.snapshot()
+	if stats == 0 {
+		t.Fatal("UpdateFromRaftStats was not called")
+	}
+	if age <= 0 {
+		t.Fatalf("heartbeat age = %v, want > 0", age)
+	}
+}
+
+func waitForMetric(t *testing.T, ready func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if ready() {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatal("metric condition not met")
+}
+
+var _ observ.MetricsCollector = (*recordingMetrics)(nil)

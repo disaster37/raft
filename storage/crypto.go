@@ -3,18 +3,38 @@
 package storage
 
 import (
+	"bytes"
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/hkdf"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"time"
 
+	"github.com/disaster37/raft/config"
 	"github.com/disaster37/raft/internal/fileutil"
 )
+
+const (
+	// DefaultHKDFInfo is the default domain-separation info string for
+	// HKDF-SHA256.
+	DefaultHKDFInfo = "raft-at-rest-aes-256-gcm-v1"
+	// DefaultDerivedKeyID is the key ID used for HKDF-derived keepers.
+	DefaultDerivedKeyID = "derived"
+	// MinSecretLength is the minimum input secret length (in bytes) for HKDF
+	// derivation.
+	MinSecretLength = 16
+)
+
+// ErrSecretTooShort is returned when the input secret to DeriveAESGCMKey or
+// DeriveAESGCMKeeper is shorter than MinSecretLength (16 bytes).
+var ErrSecretTooShort = errors.New("storage: at-rest secret must be at least 16 bytes")
 
 // EncryptedValue is the JSON envelope of one at-rest encrypted value.
 type EncryptedValue struct {
@@ -76,7 +96,61 @@ func LoadAESGCMKeeper(keyFile string, aadContext string) (*AESGCMKeeper, error) 
 	return &AESGCMKeeper{keys: keys, primary: parsed.Primary, aad: aadContext}, nil
 }
 
-// NewAESGCMKeeper builds a keeper from raw 32-byte keys.
+// DeriveAESGCMKey derives a 32-byte AES-256 key from secret using HKDF-SHA256
+// with domain-separation string info (defaulting to DefaultHKDFInfo when
+// empty). Returns ErrSecretTooShort if len(secret) < MinSecretLength.
+func DeriveAESGCMKey(secret []byte, info string) ([]byte, error) {
+	if len(secret) < MinSecretLength {
+		return nil, fmt.Errorf("%w (got %d)", ErrSecretTooShort, len(secret))
+	}
+	if info == "" {
+		info = DefaultHKDFInfo
+	}
+	key, err := hkdf.Key(sha256.New, secret, nil, info, 32)
+	if err != nil {
+		return nil, fmt.Errorf("derive AES-256 key via HKDF: %w", err)
+	}
+	return key, nil
+}
+
+// DeriveAESGCMKeeper derives a 32-byte AES-256 key from secret using
+// DeriveAESGCMKey(secret, info) and returns an AESGCMKeeper with primary key
+// ID DefaultDerivedKeyID and the given aadContext.
+func DeriveAESGCMKeeper(secret []byte, info, aadContext string) (*AESGCMKeeper, error) {
+	key, err := DeriveAESGCMKey(secret, info)
+	if err != nil {
+		return nil, err
+	}
+	return NewAESGCMKeeper(DefaultDerivedKeyID, map[string][]byte{DefaultDerivedKeyID: key}, aadContext)
+}
+
+// LoadOrDeriveAESGCMKeeper constructs an AESGCMKeeper from cfg. A JSON key
+// file is loaded as-is; a raw secret file or cfg.AtRestKey is expanded with
+// HKDF-SHA256. When neither is configured it returns (nil, nil).
+func LoadOrDeriveAESGCMKeeper(cfg config.StorageConfig) (*AESGCMKeeper, error) {
+	if cfg.AtRestKeyFile != "" {
+		keeper, err := LoadAESGCMKeeper(cfg.AtRestKeyFile, cfg.AtRestKeyInfo)
+		if err == nil {
+			return keeper, nil
+		}
+		raw, readErr := os.ReadFile(filepath.Clean(cfg.AtRestKeyFile))
+		if readErr != nil {
+			return nil, err
+		}
+		secret := bytes.TrimSpace(raw)
+		if len(secret) < MinSecretLength {
+			return nil, err
+		}
+		return DeriveAESGCMKeeper(secret, cfg.AtRestKeyInfo, cfg.AtRestKeyInfo)
+	}
+	if cfg.AtRestKey != "" {
+		return DeriveAESGCMKeeper([]byte(cfg.AtRestKey), cfg.AtRestKeyInfo, cfg.AtRestKeyInfo)
+	}
+	return nil, nil
+}
+
+// NewAESGCMKeeper builds a keeper from raw 32-byte keys. The keys map and
+// each key slice are copied so caller mutation cannot corrupt the keeper.
 func NewAESGCMKeeper(primary string, keys map[string][]byte, aadContext string) (*AESGCMKeeper, error) {
 	if primary == "" {
 		return nil, fmt.Errorf("at-rest primary key is required")
@@ -84,12 +158,14 @@ func NewAESGCMKeeper(primary string, keys map[string][]byte, aadContext string) 
 	if _, ok := keys[primary]; !ok {
 		return nil, fmt.Errorf("primary key %q not present in keys", primary)
 	}
+	copied := make(map[string][]byte, len(keys))
 	for kid, key := range keys {
 		if len(key) != 32 {
 			return nil, fmt.Errorf("key %q must be 32 bytes (got %d)", kid, len(key))
 		}
+		copied[kid] = append([]byte(nil), key...)
 	}
-	return &AESGCMKeeper{keys: keys, primary: primary, aad: aadContext}, nil
+	return &AESGCMKeeper{keys: copied, primary: primary, aad: aadContext}, nil
 }
 
 // GenerateKeyFile writes a fresh single-key at-rest key file.

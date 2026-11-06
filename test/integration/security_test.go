@@ -247,7 +247,7 @@ func TestSecurityNoPrivateKeyInLogs(t *testing.T) {
 	if err := n.WaitForLeader(ctx); err != nil {
 		t.Fatalf("WaitForLeader: %v", err)
 	}
-	deadline := time.Now().Add(5 * time.Second)
+	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
 		if strings.Contains(buf.String(), "keyring rotation failed") {
 			break

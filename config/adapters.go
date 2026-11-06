@@ -35,6 +35,7 @@ type DaggerKubernetesConfig struct {
 	CABootstrap           bool
 	ClientAuth            bool
 	SecretPollTimeout     time.Duration
+	EncryptionKey         string
 	AutopilotEnabled      bool
 	CleanupDeadServers    bool
 	MinQuorum             int
@@ -65,6 +66,7 @@ func FromDaggerKubernetes(in DaggerKubernetesConfig) Config {
 	cfg.RaftLogCacheSize = in.RaftLogCacheSize
 	cfg.Transport.MaxPool = in.TransportMaxPool
 	cfg.Storage.Backend = StorageBackendRaftBoltDB
+	cfg.Storage.AtRestKey = in.EncryptionKey
 	cfg.TLS.Enabled = in.TLSEnabled
 	cfg.TLS.Dir = in.TLSDir
 	cfg.TLS.PKIMode = PKIModeSharedCA

@@ -37,7 +37,7 @@ uses `DAGGER_KUBERNETES_RAFT_*`. Dots become underscores
 
 | Key | Type | Default | Notes |
 |---|---|---|---|
-| `peers` | list | `[]` | Explicit `{id,address}` peers. |
+| `peers` | list | `[]` | Explicit `{id,address,non_voter}` peers. |
 | `legacy_peers` | list | `[]` | `id=host:port` entries. |
 | `replicas` | int | `1` | Must be `>= 1`. |
 | `statefulset_name` | string | `""` | Required for DNS discovery. |
@@ -94,7 +94,9 @@ and `ca_secret`.
 | `bolt_timeout` | duration | `1s` | bbolt open timeout. |
 | `no_freelist_sync` | bool | `true` | bbolt freelist tuning. |
 | `initial_mmap_size` | int | `104857600` | 100 MiB virtual mmap. |
-| `at_rest_key_file` | string | `""` | AES-GCM key file for `Sealer`. |
+| `at_rest_key_file` | string | `""` | AES-GCM JSON key file or raw secret file for `Sealer`. |
+| `at_rest_key` | string | `""` | Raw secret (>= 16 bytes) expanded with HKDF-SHA256. |
+| `at_rest_key_info` | string | `raft-at-rest-aes-256-gcm-v1` | HKDF domain-separation info string. |
 
 ## `autopilot`
 

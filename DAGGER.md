@@ -28,9 +28,9 @@ dagger call -m ./dagger --src . release --version v0.1.0 --github-token env:GITH
 |---|---|
 | Go image | `golang:1.27-bookworm` |
 | Dagger engine | `v0.21.8` |
-| `golangci-lint` | `v2.12.2` |
-| `govulncheck` | `v1.1.4` |
-| `gosec` | `v2.22.2` |
+| `golangci-lint` | `v2.14.0` |
+| `govulncheck` | `v1.9.0` |
+| `gosec` | `v2.30.0` |
 | `gomarkdoc` | `v1.1.0` |
 | `dagger-library-go/golang` | `2.0.12` (`69b57f8ff6f970a8e28480741f14c58ae4aac014`) |
 | `dagger-library-go/codecov` | `2.0.19` (`d7e755bbd544480c8a96adc2204d70cf40ee6c0c`) |

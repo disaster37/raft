@@ -90,7 +90,7 @@ func (g *GenerationStore) BumpClusterGeneration(ctx context.Context) (uint64, er
 // ReadLocalGeneration returns the generation this node last synchronized with.
 func ReadLocalGeneration(dir string) (uint64, bool) {
 	//nolint:gosec // fixed generation file under the data dir
-	raw, err := os.ReadFile(filepath.Join(dir, localGenerationFile))
+	raw, err := os.ReadFile(filepath.Join(dir, localGenerationFile)) // #nosec G304
 	if err != nil {
 		return 0, false
 	}

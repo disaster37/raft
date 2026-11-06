@@ -116,7 +116,7 @@ func TestGohookbridgeSingleNodeRecovery(t *testing.T) {
 		cfg.SingleNodeRecovery = singleNodeRecovery
 		cfg.Autopilot.Enabled = false
 		cfg.Join.Interval = 100 * time.Millisecond
-		cfg.PerformanceMultiplier = 1.0
+		cfg.PerformanceMultiplier = 0.2
 		n, err := raft.NewNode(context.Background(), &cfg, raft.NodeOptions{
 			CustomListener:         ln,
 			GenerationFencer:       genStore,
