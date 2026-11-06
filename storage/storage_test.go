@@ -607,6 +607,34 @@ func TestDeriveAESGCMKeyAndKeeper(t *testing.T) {
 	}
 }
 
+func TestLoadOrDeriveAESGCMKeeperMalformedJSONKeyFile(t *testing.T) {
+	dir := t.TempDir()
+	// A JSON key file with a bad base64 key must surface its validation error
+	// rather than being silently re-derived as a raw secret (which would
+	// produce a different key and make existing ciphertext undecryptable).
+	badJSON := filepath.Join(dir, "bad.json")
+	if err := os.WriteFile(badJSON, []byte(`{"primary":"k1","keys":{"k1":"!!!"}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadOrDeriveAESGCMKeeper(config.StorageConfig{AtRestKeyFile: badJSON}); err == nil {
+		t.Fatal("expected malformed JSON key file error")
+	}
+	shortJSON := filepath.Join(dir, "short.json")
+	if err := os.WriteFile(shortJSON, []byte(`{"primary":"k1","keys":{"k1":"AAAA"}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadOrDeriveAESGCMKeeper(config.StorageConfig{AtRestKeyFile: shortJSON}); err == nil {
+		t.Fatal("expected short JSON key error")
+	}
+	missingPrimary := filepath.Join(dir, "missing-primary.json")
+	if err := os.WriteFile(missingPrimary, []byte(`{"keys":{"k1":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadOrDeriveAESGCMKeeper(config.StorageConfig{AtRestKeyFile: missingPrimary}); err == nil {
+		t.Fatal("expected missing primary error")
+	}
+}
+
 func TestLoadOrDeriveAESGCMKeeper(t *testing.T) {
 	dir := t.TempDir()
 	jsonPath := filepath.Join(dir, "keys.json")

@@ -72,6 +72,10 @@ func LoadAESGCMKeeper(keyFile string, aadContext string) (*AESGCMKeeper, error) 
 	if err != nil {
 		return nil, fmt.Errorf("read at-rest key file: %w", err)
 	}
+	return loadAESGCMKeeperFromBytes(data, aadContext)
+}
+
+func loadAESGCMKeeperFromBytes(data []byte, aadContext string) (*AESGCMKeeper, error) {
 	var parsed cryptoKeyFile
 	if err := json.Unmarshal(data, &parsed); err != nil {
 		return nil, fmt.Errorf("parse at-rest key file: %w", err)
@@ -129,17 +133,22 @@ func DeriveAESGCMKeeper(secret []byte, info, aadContext string) (*AESGCMKeeper, 
 // HKDF-SHA256. When neither is configured it returns (nil, nil).
 func LoadOrDeriveAESGCMKeeper(cfg config.StorageConfig) (*AESGCMKeeper, error) {
 	if cfg.AtRestKeyFile != "" {
-		keeper, err := LoadAESGCMKeeper(cfg.AtRestKeyFile, cfg.AtRestKeyInfo)
-		if err == nil {
-			return keeper, nil
+		raw, err := os.ReadFile(filepath.Clean(cfg.AtRestKeyFile))
+		if err != nil {
+			return nil, fmt.Errorf("read at-rest key file: %w", err)
 		}
-		raw, readErr := os.ReadFile(filepath.Clean(cfg.AtRestKeyFile))
-		if readErr != nil {
-			return nil, err
+		// Only treat the file as a JSON key file when it actually looks like
+		// one. A malformed JSON key file (valid JSON with a bad key) must
+		// surface its validation error instead of being silently re-derived as
+		// a raw secret, which would produce a different key and make previously
+		// encrypted data undecryptable.
+		var parsed cryptoKeyFile
+		if jsonErr := json.Unmarshal(raw, &parsed); jsonErr == nil && (parsed.Primary != "" || len(parsed.Keys) > 0) {
+			return loadAESGCMKeeperFromBytes(raw, cfg.AtRestKeyInfo)
 		}
 		secret := bytes.TrimSpace(raw)
 		if len(secret) < MinSecretLength {
-			return nil, err
+			return nil, fmt.Errorf("%w (got %d)", ErrSecretTooShort, len(secret))
 		}
 		return DeriveAESGCMKeeper(secret, cfg.AtRestKeyInfo, cfg.AtRestKeyInfo)
 	}
