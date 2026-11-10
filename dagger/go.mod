@@ -1,6 +1,6 @@
 module dagger/raft
 
-go 1.26.8
+go 1.26.5
 
 require (
 	github.com/Khan/genqlient v0.8.1
