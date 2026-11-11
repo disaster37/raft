@@ -3,7 +3,7 @@ package raft
 import (
 	"errors"
 
-	"github.com/disaster37/raft/fsm"
+	"github.com/disaster37/go-raft/fsm"
 )
 
 var (

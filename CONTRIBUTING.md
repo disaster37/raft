@@ -14,7 +14,7 @@
 - Standard library `testing` only (no testify, no ginkgo).
 - Table-driven tests where appropriate.
 - No dead/unused symbols; `golangci-lint` `unused` must pass.
-- `gofmt` + `goimports` with local prefix `github.com/disaster37/raft`.
+- `gofmt` + `goimports` with local prefix `github.com/disaster37/go-raft`.
 - Integration tests must use `testutil.FreeListener(t)` and timed shutdown in
   `t.Cleanup`; never probe-then-close ports.
 - Enforce `0700` directories and `0600` keys/DB/node-id.
@@ -29,7 +29,7 @@ Minimum local fallback:
 
 ```bash
 gofmt -l .
-goimports -l -local github.com/disaster37/raft .
+goimports -l -local github.com/disaster37/go-raft .
 go build ./...
 go vet ./...
 go test -race -covermode=atomic ./...

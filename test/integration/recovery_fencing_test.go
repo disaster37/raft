@@ -7,11 +7,11 @@ import (
 	"testing"
 	"time"
 
-	raft "github.com/disaster37/raft"
-	"github.com/disaster37/raft/config"
-	"github.com/disaster37/raft/fsm"
-	"github.com/disaster37/raft/k8s"
-	"github.com/disaster37/raft/testutil"
+	raft "github.com/disaster37/go-raft"
+	"github.com/disaster37/go-raft/config"
+	"github.com/disaster37/go-raft/fsm"
+	"github.com/disaster37/go-raft/k8s"
+	"github.com/disaster37/go-raft/testutil"
 )
 
 type fakeFencer struct {

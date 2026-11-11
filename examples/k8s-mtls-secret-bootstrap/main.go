@@ -6,9 +6,9 @@ import (
 	"os"
 	"time"
 
-	raft "github.com/disaster37/raft"
-	"github.com/disaster37/raft/config"
-	"github.com/disaster37/raft/k8s"
+	raft "github.com/disaster37/go-raft"
+	"github.com/disaster37/go-raft/config"
+	"github.com/disaster37/go-raft/k8s"
 )
 
 func main() {

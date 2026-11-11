@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/disaster37/raft/internal/fileutil"
+	"github.com/disaster37/go-raft/internal/fileutil"
 )
 
 // IssueOrReuseNodeCert issues a per-node leaf certificate signed by ca and

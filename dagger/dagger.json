@@ -1,5 +1,5 @@
 {
-  "name": "raft",
+  "name": "go-raft",
   "engineVersion": "v0.21.8",
   "sdk": {
     "source": "go"

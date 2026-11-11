@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/disaster37/raft/internal/fileutil"
+	"github.com/disaster37/go-raft/internal/fileutil"
 )
 
 // BootstrapMaterial holds the initial pre-Raft TLS material.

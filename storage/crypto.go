@@ -17,8 +17,8 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/disaster37/raft/config"
-	"github.com/disaster37/raft/internal/fileutil"
+	"github.com/disaster37/go-raft/config"
+	"github.com/disaster37/go-raft/internal/fileutil"
 )
 
 const (

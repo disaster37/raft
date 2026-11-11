@@ -11,7 +11,7 @@ import (
 	raftboltdb "github.com/hashicorp/raft-boltdb/v2"
 	bolt "go.etcd.io/bbolt"
 
-	"github.com/disaster37/raft/config"
+	"github.com/disaster37/go-raft/config"
 )
 
 const removedKey = "removed"

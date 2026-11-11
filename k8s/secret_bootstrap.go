@@ -13,9 +13,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 
-	"github.com/disaster37/raft/internal/fileutil"
-	"github.com/disaster37/raft/observ"
-	"github.com/disaster37/raft/pki"
+	"github.com/disaster37/go-raft/internal/fileutil"
+	"github.com/disaster37/go-raft/observ"
+	"github.com/disaster37/go-raft/pki"
 )
 
 var errEmptySecret = errors.New("bootstrap CA secret exists but ca.crt/ca.key are empty")

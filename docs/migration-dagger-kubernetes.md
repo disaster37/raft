@@ -2,7 +2,7 @@
 
 ## Configuration
 
-| `dagger-kubernetes` | `github.com/disaster37/raft` |
+| `dagger-kubernetes` | `github.com/disaster37/go-raft` |
 |---|---|
 | `domain.RaftConfig` | `config.Config` |
 | `config.Load` | `config.LoadFromFile` + `config.Validate` |

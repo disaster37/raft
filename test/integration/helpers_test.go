@@ -12,12 +12,12 @@ import (
 
 	"github.com/sirupsen/logrus"
 
-	raft "github.com/disaster37/raft"
-	"github.com/disaster37/raft/config"
-	"github.com/disaster37/raft/keyring"
-	"github.com/disaster37/raft/observ"
-	"github.com/disaster37/raft/pki"
-	"github.com/disaster37/raft/testutil"
+	raft "github.com/disaster37/go-raft"
+	"github.com/disaster37/go-raft/config"
+	"github.com/disaster37/go-raft/keyring"
+	"github.com/disaster37/go-raft/observ"
+	"github.com/disaster37/go-raft/pki"
+	"github.com/disaster37/go-raft/testutil"
 )
 
 type staticBootstrapProvider struct {

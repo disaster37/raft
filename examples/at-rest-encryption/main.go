@@ -5,7 +5,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/disaster37/raft/storage"
+	"github.com/disaster37/go-raft/storage"
 )
 
 func main() {

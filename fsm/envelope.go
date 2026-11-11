@@ -12,8 +12,8 @@ import (
 
 	hraft "github.com/hashicorp/raft"
 
-	"github.com/disaster37/raft/autopilot"
-	"github.com/disaster37/raft/keyring"
+	"github.com/disaster37/go-raft/autopilot"
+	"github.com/disaster37/go-raft/keyring"
 )
 
 // System command kinds reserved for EnvelopeFSM.

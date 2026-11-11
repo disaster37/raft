@@ -26,7 +26,7 @@ spec:
             value: "1"
       containers:
         - name: raft
-          image: ghcr.io/disaster37/raft:latest
+          image: ghcr.io/disaster37/go-raft:latest
           ports:
             - {name: raft, containerPort: 8081}
             - {name: http, containerPort: 8080}

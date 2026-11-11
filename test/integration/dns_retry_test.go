@@ -9,8 +9,8 @@ import (
 
 	hraft "github.com/hashicorp/raft"
 
-	"github.com/disaster37/raft/pki"
-	"github.com/disaster37/raft/transport"
+	"github.com/disaster37/go-raft/pki"
+	"github.com/disaster37/go-raft/transport"
 )
 
 func TestRetryingStreamLayerSurvivesPortBounce(t *testing.T) {

@@ -2,7 +2,7 @@
 
 ## Configuration
 
-| `gohookbridge` | `github.com/disaster37/raft` |
+| `gohookbridge` | `github.com/disaster37/go-raft` |
 |---|---|
 | `RaftConfig` flags | `config.Config` |
 | `raft.bind_addr` | `Config.BindAddr` |

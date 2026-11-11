@@ -41,4 +41,4 @@ formatters:
   settings:
     goimports:
       local-prefixes:
-        - github.com/disaster37/raft
+        - github.com/disaster37/go-raft

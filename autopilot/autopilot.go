@@ -10,8 +10,8 @@ import (
 
 	hraft "github.com/hashicorp/raft"
 
-	"github.com/disaster37/raft/config"
-	"github.com/disaster37/raft/observ"
+	"github.com/disaster37/go-raft/config"
+	"github.com/disaster37/go-raft/observ"
 )
 
 // FollowerState tracks the health of a single follower.

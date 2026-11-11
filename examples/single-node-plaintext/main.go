@@ -6,9 +6,9 @@ import (
 	"log"
 	"time"
 
-	raft "github.com/disaster37/raft"
-	"github.com/disaster37/raft/config"
-	"github.com/disaster37/raft/fsm"
+	raft "github.com/disaster37/go-raft"
+	"github.com/disaster37/go-raft/config"
+	"github.com/disaster37/go-raft/fsm"
 )
 
 func main() {

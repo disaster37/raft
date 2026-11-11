@@ -12,7 +12,7 @@ import (
 	hraft "github.com/hashicorp/raft"
 	raftboltdb "github.com/hashicorp/raft-boltdb/v2"
 
-	"github.com/disaster37/raft/config"
+	"github.com/disaster37/go-raft/config"
 )
 
 func TestBoltStoreBackend(t *testing.T) {

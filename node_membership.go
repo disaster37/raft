@@ -10,8 +10,8 @@ import (
 
 	hraft "github.com/hashicorp/raft"
 
-	"github.com/disaster37/raft/discovery"
-	"github.com/disaster37/raft/keyring"
+	"github.com/disaster37/go-raft/discovery"
+	"github.com/disaster37/go-raft/keyring"
 )
 
 // AddVoter adds a voting member. Leader-only.

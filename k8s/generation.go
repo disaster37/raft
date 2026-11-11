@@ -11,7 +11,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/util/retry"
 
-	"github.com/disaster37/raft/internal/fileutil"
+	"github.com/disaster37/go-raft/internal/fileutil"
 )
 
 const (

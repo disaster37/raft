@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	raft "github.com/disaster37/raft"
-	"github.com/disaster37/raft/config"
+	raft "github.com/disaster37/go-raft"
+	"github.com/disaster37/go-raft/config"
 )
 
 // TestCluster is a loopback Raft cluster for tests. It uses the in-memory

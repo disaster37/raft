@@ -1,4 +1,4 @@
-module dagger/raft
+module dagger/go-raft
 
 go 1.26.5
 

@@ -9,7 +9,7 @@ import (
 	"github.com/hashicorp/go-hclog"
 	hraft "github.com/hashicorp/raft"
 
-	"github.com/disaster37/raft/observ"
+	"github.com/disaster37/go-raft/observ"
 )
 
 // TransportOptions configures NewStreamTransport.

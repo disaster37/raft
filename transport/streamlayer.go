@@ -12,8 +12,8 @@ import (
 
 	hraft "github.com/hashicorp/raft"
 
-	"github.com/disaster37/raft/internal/netutil"
-	"github.com/disaster37/raft/observ"
+	"github.com/disaster37/go-raft/internal/netutil"
+	"github.com/disaster37/go-raft/observ"
 )
 
 // IdleCloser is implemented by stream layers that can force pooled

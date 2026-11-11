@@ -20,7 +20,7 @@ import (
 
 	hraft "github.com/hashicorp/raft"
 
-	"github.com/disaster37/raft/pki"
+	"github.com/disaster37/go-raft/pki"
 )
 
 func TestHostAddrPreservesHostname(t *testing.T) {

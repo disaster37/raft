@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/disaster37/raft/transport"
+	"github.com/disaster37/go-raft/transport"
 )
 
 const (

@@ -12,13 +12,13 @@ import (
 
 	hraft "github.com/hashicorp/raft"
 
-	raft "github.com/disaster37/raft"
-	"github.com/disaster37/raft/config"
-	"github.com/disaster37/raft/discovery"
-	"github.com/disaster37/raft/fsm"
-	"github.com/disaster37/raft/keyring"
-	"github.com/disaster37/raft/storage"
-	"github.com/disaster37/raft/testutil"
+	raft "github.com/disaster37/go-raft"
+	"github.com/disaster37/go-raft/config"
+	"github.com/disaster37/go-raft/discovery"
+	"github.com/disaster37/go-raft/fsm"
+	"github.com/disaster37/go-raft/keyring"
+	"github.com/disaster37/go-raft/storage"
+	"github.com/disaster37/go-raft/testutil"
 )
 
 func TestNewInmemNodeApplyAndKV(t *testing.T) {

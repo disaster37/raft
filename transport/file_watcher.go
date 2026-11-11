@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/disaster37/raft/observ"
+	"github.com/disaster37/go-raft/observ"
 )
 
 // FileWatcher polls cert/key/CA files and updates a DynamicTLSProvider.

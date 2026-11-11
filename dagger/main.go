@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"dagger/raft/internal/dagger"
+	"dagger/go-raft/internal/dagger"
 )
 
 const (
@@ -16,54 +16,54 @@ const (
 	gomarkdocVersion    = "v1.1.0"
 )
 
-// Raft is the Dagger CI module for github.com/disaster37/raft.
-type Raft struct {
+// GoRaft is the Dagger CI module for github.com/disaster37/go-raft.
+type GoRaft struct {
 	Src *dagger.Directory
 }
 
-// New initializes the raft CI module.
+// New initializes the go-raft CI module.
 func New(
 	// The source directory.
 	// +required
 	src *dagger.Directory,
-) *Raft {
-	return &Raft{Src: src}
+) *GoRaft {
+	return &GoRaft{Src: src}
 }
 
-func (m *Raft) base() *dagger.Container {
+func (m *GoRaft) base() *dagger.Container {
 	return dag.Container().From(golangImage).WithDirectory("/src", m.Src).WithWorkdir("/src")
 }
 
 // FormatCheck fails when any Go file is not gofmt-formatted.
-func (m *Raft) FormatCheck(ctx context.Context) error {
+func (m *GoRaft) FormatCheck(ctx context.Context) error {
 	_, err := m.base().WithExec([]string{"sh", "-c", "test -z \"$(gofmt -s -l .)\""}).Sync(ctx)
 	return err
 }
 
 // Lint runs golangci-lint.
-func (m *Raft) Lint(ctx context.Context) (string, error) {
+func (m *GoRaft) Lint(ctx context.Context) (string, error) {
 	base := m.base().WithExec([]string{"sh", "-c", fmt.Sprintf("GOBIN=/usr/local/bin go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@%s", golangciLintVersion)})
 	return dag.Golang(m.Src, dagger.GolangOpts{Base: base}).Lint(ctx)
 }
 
 // Vulncheck runs govulncheck.
-func (m *Raft) Vulncheck(ctx context.Context) (string, error) {
+func (m *GoRaft) Vulncheck(ctx context.Context) (string, error) {
 	base := m.base().WithExec([]string{"sh", "-c", fmt.Sprintf("GOBIN=/usr/local/bin go install golang.org/x/vuln/cmd/govulncheck@%s", govulncheckVersion)})
 	return dag.Golang(m.Src, dagger.GolangOpts{Base: base}).Vulncheck(ctx)
 }
 
 // Gosec runs gosec.
-func (m *Raft) Gosec(ctx context.Context) (string, error) {
+func (m *GoRaft) Gosec(ctx context.Context) (string, error) {
 	return m.base().WithExec([]string{"sh", "-c", fmt.Sprintf("go install github.com/securego/gosec/v2/cmd/gosec@%s && gosec -exclude-generated -quiet ./...", gosecVersion)}).Stdout(ctx)
 }
 
 // Test runs the unit tests.
-func (m *Raft) Test(ctx context.Context) (*dagger.File, error) {
+func (m *GoRaft) Test(ctx context.Context) (*dagger.File, error) {
 	return dag.Golang(m.Src).Test(), nil
 }
 
 // TestRace runs go vet and the race-enabled test suite.
-func (m *Raft) TestRace(ctx context.Context) (*dagger.File, error) {
+func (m *GoRaft) TestRace(ctx context.Context) (*dagger.File, error) {
 	ctr := m.base().
 		WithExec([]string{"go", "vet", "./..."}).
 		WithExec([]string{"go", "test", "-race", "-coverprofile=coverage.out", "-covermode=atomic", "./..."}).
@@ -72,7 +72,7 @@ func (m *Raft) TestRace(ctx context.Context) (*dagger.File, error) {
 }
 
 // Coverage enforces the minimum statement coverage.
-func (m *Raft) Coverage(ctx context.Context, minTotal float64) (string, error) {
+func (m *GoRaft) Coverage(ctx context.Context, minTotal float64) (string, error) {
 	file, err := m.TestRace(ctx)
 	if err != nil {
 		return "", err
@@ -80,7 +80,7 @@ func (m *Raft) Coverage(ctx context.Context, minTotal float64) (string, error) {
 	return m.checkCoverageFile(ctx, file, minTotal)
 }
 
-func (m *Raft) checkCoverageFile(ctx context.Context, coverage *dagger.File, minTotal float64) (string, error) {
+func (m *GoRaft) checkCoverageFile(ctx context.Context, coverage *dagger.File, minTotal float64) (string, error) {
 	script := `grep -v '/examples/' coverage.out | grep -v '/test/' > coverage.filtered.out
 go tool cover -func=coverage.filtered.out | tail -1
 awk 'NR>1 { split($1,a,":"); file=a[1]; n=split(file,parts,"/"); pkg=parts[n-1]; stmts=$2; count=$3; total[pkg]+=stmts; if (count+0>0) covered[pkg]+=stmts } END { for (pkg in total) printf "pkg %s %.1f\n", pkg, 100*covered[pkg]/total[pkg] }' coverage.filtered.out`
@@ -124,7 +124,7 @@ awk 'NR>1 { split($1,a,":"); file=a[1]; n=split(file,parts,"/"); pkg=parts[n-1];
 }
 
 // Build compiles every example into bin/examples.
-func (m *Raft) Build(ctx context.Context, static bool) (*dagger.Directory, error) {
+func (m *GoRaft) Build(ctx context.Context, static bool) (*dagger.Directory, error) {
 	ctr := m.base()
 	if static {
 		ctr = ctr.WithEnvVariable("CGO_ENABLED", "0")
@@ -136,7 +136,7 @@ func (m *Raft) Build(ctx context.Context, static bool) (*dagger.Directory, error
 }
 
 // Docs generates docs/api.md with gomarkdoc.
-func (m *Raft) Docs(ctx context.Context, check bool) (*dagger.File, error) {
+func (m *GoRaft) Docs(ctx context.Context, check bool) (*dagger.File, error) {
 	cmd := fmt.Sprintf("go install github.com/princjef/gomarkdoc/cmd/gomarkdoc@%s && gomarkdoc ./... --exclude-dirs ./test/... --output docs/api.md", gomarkdocVersion)
 	if check {
 		cmd = fmt.Sprintf("go install github.com/princjef/gomarkdoc/cmd/gomarkdoc@%s && gomarkdoc ./... --exclude-dirs ./test/... --output docs/api.md --check", gomarkdocVersion)
@@ -149,7 +149,7 @@ func (m *Raft) Docs(ctx context.Context, check bool) (*dagger.File, error) {
 }
 
 // Ci runs the full CI pipeline.
-func (m *Raft) Ci(ctx context.Context, static bool) (*dagger.Directory, error) {
+func (m *GoRaft) Ci(ctx context.Context, static bool) (*dagger.Directory, error) {
 	if err := m.FormatCheck(ctx); err != nil {
 		return nil, err
 	}
@@ -181,7 +181,7 @@ func (m *Raft) Ci(ctx context.Context, static bool) (*dagger.Directory, error) {
 }
 
 // Release validates the version and publishes a GitHub release.
-func (m *Raft) Release(ctx context.Context, version string, githubToken *dagger.Secret) (string, error) {
+func (m *GoRaft) Release(ctx context.Context, version string, githubToken *dagger.Secret) (string, error) {
 	if !strings.HasPrefix(version, "v") || strings.Count(version, ".") != 2 {
 		return "", fmt.Errorf("version %q is not a clean semver tag", version)
 	}

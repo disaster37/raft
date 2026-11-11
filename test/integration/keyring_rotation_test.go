@@ -10,10 +10,10 @@ import (
 
 	hraft "github.com/hashicorp/raft"
 
-	raft "github.com/disaster37/raft"
-	"github.com/disaster37/raft/config"
-	"github.com/disaster37/raft/fsm"
-	"github.com/disaster37/raft/keyring"
+	raft "github.com/disaster37/go-raft"
+	"github.com/disaster37/go-raft/config"
+	"github.com/disaster37/go-raft/fsm"
+	"github.com/disaster37/go-raft/keyring"
 )
 
 func TestPhasedRotationSharedCAModeUnderConcurrentWrites(t *testing.T) {

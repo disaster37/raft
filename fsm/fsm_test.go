@@ -15,8 +15,8 @@ import (
 	hraft "github.com/hashicorp/raft"
 	bolt "go.etcd.io/bbolt"
 
-	"github.com/disaster37/raft/autopilot"
-	"github.com/disaster37/raft/keyring"
+	"github.com/disaster37/go-raft/autopilot"
+	"github.com/disaster37/go-raft/keyring"
 )
 
 type memSink struct {

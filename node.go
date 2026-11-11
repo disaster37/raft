@@ -17,15 +17,15 @@ import (
 
 	hraft "github.com/hashicorp/raft"
 
-	"github.com/disaster37/raft/autopilot"
-	"github.com/disaster37/raft/config"
-	"github.com/disaster37/raft/discovery"
-	"github.com/disaster37/raft/fsm"
-	"github.com/disaster37/raft/keyring"
-	"github.com/disaster37/raft/observ"
-	"github.com/disaster37/raft/pki"
-	"github.com/disaster37/raft/storage"
-	"github.com/disaster37/raft/transport"
+	"github.com/disaster37/go-raft/autopilot"
+	"github.com/disaster37/go-raft/config"
+	"github.com/disaster37/go-raft/discovery"
+	"github.com/disaster37/go-raft/fsm"
+	"github.com/disaster37/go-raft/keyring"
+	"github.com/disaster37/go-raft/observ"
+	"github.com/disaster37/go-raft/pki"
+	"github.com/disaster37/go-raft/storage"
+	"github.com/disaster37/go-raft/transport"
 )
 
 // GenerationFencer coordinates cluster generation fencing across recoveries.

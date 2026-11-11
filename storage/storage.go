@@ -13,8 +13,8 @@ import (
 	hraft "github.com/hashicorp/raft"
 	bolt "go.etcd.io/bbolt"
 
-	"github.com/disaster37/raft/config"
-	"github.com/disaster37/raft/internal/fileutil"
+	"github.com/disaster37/go-raft/config"
+	"github.com/disaster37/go-raft/internal/fileutil"
 )
 
 // Backend bundles the Raft log, stable, and snapshot stores.

@@ -13,12 +13,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
 
-	raft "github.com/disaster37/raft"
-	"github.com/disaster37/raft/config"
-	"github.com/disaster37/raft/fsm"
-	"github.com/disaster37/raft/k8s"
-	"github.com/disaster37/raft/storage"
-	"github.com/disaster37/raft/testutil"
+	raft "github.com/disaster37/go-raft"
+	"github.com/disaster37/go-raft/config"
+	"github.com/disaster37/go-raft/fsm"
+	"github.com/disaster37/go-raft/k8s"
+	"github.com/disaster37/go-raft/storage"
+	"github.com/disaster37/go-raft/testutil"
 )
 
 func TestGohookbridgeCompat(t *testing.T) {

@@ -18,7 +18,7 @@ import (
 	k8stesting "k8s.io/client-go/testing"
 	"k8s.io/client-go/util/retry"
 
-	"github.com/disaster37/raft/pki"
+	"github.com/disaster37/go-raft/pki"
 )
 
 func TestSecretBootstrapOrdinal0Creates(t *testing.T) {

@@ -11,8 +11,8 @@ import (
 
 	hraft "github.com/hashicorp/raft"
 
-	raft "github.com/disaster37/raft"
-	"github.com/disaster37/raft/config"
+	raft "github.com/disaster37/go-raft"
+	"github.com/disaster37/go-raft/config"
 )
 
 type counterFSM struct {

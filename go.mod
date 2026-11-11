@@ -1,4 +1,4 @@
-module github.com/disaster37/raft
+module github.com/disaster37/go-raft
 
 go 1.27.0
 

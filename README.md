@@ -1,6 +1,6 @@
-# raft
+# go-raft
 
-[![CI](https://github.com/disaster37/raft/actions/workflows/ci.yml/badge.svg)](https://github.com/disaster37/raft/actions/workflows/ci.yml)
+[![CI](https://github.com/disaster37/go-raft/actions/workflows/ci.yml/badge.svg)](https://github.com/disaster37/go-raft/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
 Production-grade shared Raft library for Go: HashiCorp Raft + BoltDB +
@@ -84,9 +84,9 @@ import (
     "log"
     "time"
 
-    raft "github.com/disaster37/raft"
-    "github.com/disaster37/raft/config"
-    "github.com/disaster37/raft/fsm"
+    raft "github.com/disaster37/go-raft"
+    "github.com/disaster37/go-raft/config"
+    "github.com/disaster37/go-raft/fsm"
 )
 
 func main() {

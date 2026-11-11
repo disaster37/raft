@@ -6,9 +6,9 @@ import (
 	"net"
 	"time"
 
-	"github.com/disaster37/raft/config"
-	"github.com/disaster37/raft/observ"
-	"github.com/disaster37/raft/storage"
+	"github.com/disaster37/go-raft/config"
+	"github.com/disaster37/go-raft/observ"
+	"github.com/disaster37/go-raft/storage"
 )
 
 // KeyringApplier abstracts Raft leadership and FSM keyring persistence for

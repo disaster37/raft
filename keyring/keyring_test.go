@@ -11,10 +11,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/disaster37/raft/config"
-	"github.com/disaster37/raft/pki"
-	"github.com/disaster37/raft/storage"
-	"github.com/disaster37/raft/transport"
+	"github.com/disaster37/go-raft/config"
+	"github.com/disaster37/go-raft/pki"
+	"github.com/disaster37/go-raft/storage"
+	"github.com/disaster37/go-raft/transport"
 )
 
 func TestGenerateTLSKeyWithGocaSharedCAAndSelfSigned(t *testing.T) {
