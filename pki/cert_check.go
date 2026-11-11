@@ -27,9 +27,9 @@ func IssueOrReuseNodeCert(dir string, ca *MintingCA, commonName, organization st
 	keyPath := filepath.Join(dir, "node.key")
 
 	//nolint:gosec // certPath is a fixed file under the configured TLS dir
-	if existingCert, readErr := os.ReadFile(certPath); readErr == nil {
+	if existingCert, readErr := os.ReadFile(certPath); readErr == nil { // #nosec G304
 		//nolint:gosec // keyPath is a fixed file under the configured TLS dir
-		if existingKey, keyErr := os.ReadFile(keyPath); keyErr == nil {
+		if existingKey, keyErr := os.ReadFile(keyPath); keyErr == nil { // #nosec G304
 			if cert, parseErr := ParsePEMCert(existingCert); parseErr == nil &&
 				ReusableNodeCert(cert, ca, commonName, dnsNames, ipAddrs, safetyMargin, time.Now()) {
 				return existingCert, existingKey, nil

@@ -1,7 +1,7 @@
 # raft
 
 [![CI](https://github.com/disaster37/raft/actions/workflows/ci.yml/badge.svg)](https://github.com/disaster37/raft/actions/workflows/ci.yml)
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
 Production-grade shared Raft library for Go: HashiCorp Raft + BoltDB +
 Kubernetes StatefulSet DNS discovery + dynamic mTLS + Vault-style in-band
@@ -170,4 +170,4 @@ See [`SECURITY.md`](SECURITY.md) for the full threat model.
 
 ## License
 
-MIT. See [`LICENSE`](LICENSE).
+Apache-2.0. See [`LICENSE`](LICENSE).

@@ -26,6 +26,8 @@ var sysPrefix = []byte{0xFF, 'R', 'S', 'Y'}
 
 var snapshotMagic = []byte{'R', 'S', 'N', '1'}
 
+const maxSnapshotHeaderSize = 16 * 1024 * 1024
+
 type snapshotHeader struct {
 	Keyring *keyring.TLSKeyring             `json:"keyring,omitempty"`
 	Echoes  map[string]autopilot.EchoUpdate `json:"echoes,omitempty"`
@@ -126,6 +128,9 @@ func (e *EnvelopeFSM) Restore(rc io.ReadCloser) error {
 			return fmt.Errorf("read snapshot header length: %w", err)
 		}
 		headerLen := binary.BigEndian.Uint32(lenBuf[:])
+		if headerLen > maxSnapshotHeaderSize {
+			return fmt.Errorf("snapshot header length %d exceeds max %d", headerLen, maxSnapshotHeaderSize)
+		}
 		headerBuf := make([]byte, headerLen)
 		if _, err := io.ReadFull(br, headerBuf); err != nil {
 			return fmt.Errorf("read snapshot header: %w", err)
@@ -185,7 +190,7 @@ func (s *envelopeSnapshot) Persist(sink hraft.SnapshotSink) error {
 	}
 	var lenBuf [4]byte
 	//nolint:gosec // snapshot headers are small JSON documents
-	binary.BigEndian.PutUint32(lenBuf[:], uint32(len(header)))
+	binary.BigEndian.PutUint32(lenBuf[:], uint32(len(header))) // #nosec G115
 	if _, err := sink.Write(lenBuf[:]); err != nil {
 		_ = sink.Cancel()
 		return fmt.Errorf("write snapshot header length: %w", err)

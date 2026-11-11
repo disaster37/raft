@@ -4,7 +4,10 @@ package observ
 
 import (
 	"bytes"
+	"fmt"
 	"io"
+	"log"
+	"sort"
 	"strings"
 	"sync"
 
@@ -52,6 +55,53 @@ func (a *LogrusAdapter) Error(msg string, err error, fields map[string]any) {
 		entry = entry.WithError(err)
 	}
 	entry.Error(msg)
+}
+
+// StdlibAdapter adapts a standard library *log.Logger to Logger.
+type StdlibAdapter struct {
+	logger *log.Logger
+}
+
+// NewStdlibAdapter returns a Logger backed by l. A nil logger yields a no-op
+// logger.
+func NewStdlibAdapter(l *log.Logger) Logger {
+	if l == nil {
+		return NewNoopLogger()
+	}
+	return &StdlibAdapter{logger: l}
+}
+
+func (a *StdlibAdapter) Debug(msg string, fields map[string]any) {
+	a.log("DEBUG", msg, nil, fields)
+}
+
+func (a *StdlibAdapter) Info(msg string, fields map[string]any) {
+	a.log("INFO", msg, nil, fields)
+}
+
+func (a *StdlibAdapter) Warn(msg string, fields map[string]any) {
+	a.log("WARN", msg, nil, fields)
+}
+
+func (a *StdlibAdapter) Error(msg string, err error, fields map[string]any) {
+	a.log("ERROR", msg, err, fields)
+}
+
+func (a *StdlibAdapter) log(level, msg string, err error, fields map[string]any) {
+	parts := make([]string, 0, len(fields)+2)
+	parts = append(parts, fmt.Sprintf("level=%s", level))
+	if err != nil {
+		parts = append(parts, fmt.Sprintf("error=%v", err))
+	}
+	keys := make([]string, 0, len(fields))
+	for key := range fields {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		parts = append(parts, fmt.Sprintf("%s=%v", key, fields[key]))
+	}
+	a.logger.Printf("%s %s", msg, strings.Join(parts, " "))
 }
 
 // NoopLogger discards every log entry.

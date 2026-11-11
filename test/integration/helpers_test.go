@@ -2,6 +2,7 @@ package integration
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net"
 	"os"
@@ -86,7 +87,7 @@ func newTestClusterWithConfig(t *testing.T, count, startCount int, tlsEnabled, r
 		cfg.AdvertiseAddr = addrs[i]
 		cfg.Discovery.Peers = peers
 		cfg.Discovery.Replicas = count
-		cfg.PerformanceMultiplier = 1.0
+		cfg.PerformanceMultiplier = 0.2
 		cfg.ApplyTimeout = 5 * time.Second
 		cfg.SnapshotThreshold = 20
 		cfg.SnapshotInterval = 200 * time.Millisecond
@@ -195,7 +196,7 @@ func restartTestNode(t *testing.T, n *testNode) {
 }
 
 func nodeID(i int) string {
-	return "node-" + string(rune('0'+i))
+	return fmt.Sprintf("node-%d", i)
 }
 
 func leaderOf(t *testing.T, nodes []*testNode) *testNode {
@@ -240,7 +241,7 @@ func newSelfSignedClusterWithConfig(t *testing.T, count int, wrap func(i int, ln
 		cfg.AdvertiseAddr = addrs[i]
 		cfg.Discovery.Peers = peers
 		cfg.Discovery.Replicas = count
-		cfg.PerformanceMultiplier = 1.0
+		cfg.PerformanceMultiplier = 0.2
 		cfg.ApplyTimeout = 5 * time.Second
 		cfg.Join.Interval = 100 * time.Millisecond
 		cfg.Join.ReconcileTimeout = 2 * time.Second

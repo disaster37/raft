@@ -9,6 +9,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	"fmt"
 	"io"
 	"math/big"
 	"net"
@@ -761,8 +762,8 @@ func TestFileWatcherExpiredAndFuture(t *testing.T) {
 	} {
 		t.Run(window.name, func(t *testing.T) {
 			certPEM, keyPEM := issueCustomCert(t, ca, window.notBefore, window.notAfter)
-			certFile := filepath.Join(dir, window.name+".crt")
-			keyFile := filepath.Join(dir, window.name+".key")
+			certFile := filepath.Join(dir, fmt.Sprintf("%s.crt", window.name))
+			keyFile := filepath.Join(dir, fmt.Sprintf("%s.key", window.name))
 			_ = os.WriteFile(certFile, certPEM, 0o600)
 			_ = os.WriteFile(keyFile, keyPEM, 0o600)
 			if _, err := NewFileWatcher(certFile, keyFile, caFile, time.Millisecond, time.Hour, true, nil); err == nil {
@@ -807,4 +808,198 @@ func issueCustomCert(t *testing.T, ca *pki.MintingCA, notBefore, notAfter time.T
 	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
 	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(key)})
 	return certPEM, keyPEM
+}
+
+func TestTrackedConnEvictsOnClose(t *testing.T) {
+	ca, _ := pki.NewMintingCA("ca", "org", 365*24*time.Hour)
+	leaf := issueLeaf(t, ca, "node")
+	provider := NewDynamicTLSProvider(leaf, ca.CertPool(), ca.CertPool(), true)
+	plain := newPlainStreamLayerFromListener(&dummyListener{}, nil)
+	tlsLayer := newTLSStreamLayerFromListener(&dummyListener{}, nil, provider)
+	retrying := NewRetryingStreamLayer(plain, nil, time.Second, 0, time.Millisecond, nil).(*RetryingStreamLayer)
+
+	tests := []struct {
+		name  string
+		track func(net.Conn) net.Conn
+		count func() int
+	}{
+		{"plain", plain.track, func() int {
+			plain.mu.Lock()
+			defer plain.mu.Unlock()
+			return len(plain.conns)
+		}},
+		{"tls", tlsLayer.track, func() int {
+			tlsLayer.mu.Lock()
+			defer tlsLayer.mu.Unlock()
+			return len(tlsLayer.conns)
+		}},
+		{"retrying", retrying.track, func() int {
+			retrying.mu.Lock()
+			defer retrying.mu.Unlock()
+			return len(retrying.conns)
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server, client := net.Pipe()
+			defer func() { _ = client.Close() }()
+			tracked := tt.track(server)
+			if got := tt.count(); got != 1 {
+				t.Fatalf("tracked connections = %d, want 1", got)
+			}
+			if err := tracked.Close(); err != nil {
+				t.Fatalf("close: %v", err)
+			}
+			if got := tt.count(); got != 0 {
+				t.Fatalf("tracked connections after close = %d, want 0", got)
+			}
+		})
+	}
+}
+
+func TestCloseIdleConnectionsNoDeadlock(t *testing.T) {
+	ca, _ := pki.NewMintingCA("ca", "org", 365*24*time.Hour)
+	leaf := issueLeaf(t, ca, "node")
+	provider := NewDynamicTLSProvider(leaf, ca.CertPool(), ca.CertPool(), true)
+	plain := newPlainStreamLayerFromListener(&dummyListener{}, nil)
+	tlsLayer := newTLSStreamLayerFromListener(&dummyListener{}, nil, provider)
+	retrying := NewRetryingStreamLayer(plain, nil, time.Second, 0, time.Millisecond, nil).(*RetryingStreamLayer)
+
+	tests := []struct {
+		name      string
+		track     func(net.Conn) net.Conn
+		closeIdle func()
+		count     func() int
+	}{
+		{"plain", plain.track, plain.CloseIdleConnections, func() int {
+			plain.mu.Lock()
+			defer plain.mu.Unlock()
+			return len(plain.conns)
+		}},
+		{"tls", tlsLayer.track, tlsLayer.CloseIdleConnections, func() int {
+			tlsLayer.mu.Lock()
+			defer tlsLayer.mu.Unlock()
+			return len(tlsLayer.conns)
+		}},
+		{"retrying", retrying.track, retrying.CloseIdleConnections, func() int {
+			retrying.mu.Lock()
+			defer retrying.mu.Unlock()
+			return len(retrying.conns)
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server, client := net.Pipe()
+			defer func() { _ = client.Close() }()
+			_ = tt.track(server)
+			done := make(chan struct{})
+			go func() {
+				tt.closeIdle()
+				close(done)
+			}()
+			select {
+			case <-done:
+			case <-time.After(time.Second):
+				t.Fatal("CloseIdleConnections deadlocked")
+			}
+			if got := tt.count(); got != 0 {
+				t.Fatalf("tracked connections after close = %d, want 0", got)
+			}
+		})
+	}
+}
+
+func TestRetryingStreamLayerPlaintextRetry(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	addr := ln.Addr().String()
+	_ = ln.Close()
+
+	go func() {
+		time.Sleep(200 * time.Millisecond)
+		server, err := net.Listen("tcp", addr)
+		if err != nil {
+			return
+		}
+		layer := newPlainStreamLayerFromListener(server, nil)
+		defer layer.Close()
+		conn, err := layer.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		buf := make([]byte, 1)
+		_, _ = conn.Read(buf)
+		_, _ = conn.Write(buf)
+	}()
+
+	inner := newPlainStreamLayerFromListener(&dummyListener{}, nil)
+	retrying := NewRetryingStreamLayer(inner, nil, time.Second, 10, 50*time.Millisecond, nil)
+	conn, err := retrying.Dial(hraft.ServerAddress(addr), time.Second)
+	if err != nil {
+		t.Fatalf("plaintext retrying dial: %v", err)
+	}
+	defer conn.Close()
+	if _, err := conn.Write([]byte("p")); err != nil {
+		t.Fatal(err)
+	}
+	buf := make([]byte, 1)
+	if _, err := io.ReadFull(conn, buf); err != nil {
+		t.Fatal(err)
+	}
+	if string(buf) != "p" {
+		t.Fatalf("echo = %q", buf)
+	}
+}
+
+func TestRetryingStreamLayerCloseIdleCascadesToInner(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	inner := newPlainStreamLayerFromListener(ln, nil)
+	retrying := NewRetryingStreamLayer(inner, nil, time.Second, 0, time.Millisecond, nil).(*RetryingStreamLayer)
+	accepted := make(chan net.Conn, 1)
+	go func() {
+		conn, err := inner.Accept()
+		if err == nil {
+			accepted <- conn
+		}
+	}()
+	conn, err := retrying.Dial(hraft.ServerAddress(ln.Addr().String()), time.Second)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	defer conn.Close()
+	var serverConn net.Conn
+	select {
+	case serverConn = <-accepted:
+	case <-time.After(time.Second):
+		t.Fatal("inner accept did not complete")
+	}
+	defer func() { _ = serverConn.Close() }()
+
+	retrying.mu.Lock()
+	outbound := len(retrying.conns)
+	retrying.mu.Unlock()
+	inner.mu.Lock()
+	inbound := len(inner.conns)
+	inner.mu.Unlock()
+	if outbound != 1 || inbound != 1 {
+		t.Fatalf("tracked outbound=%d inbound=%d, want 1/1", outbound, inbound)
+	}
+
+	retrying.CloseIdleConnections()
+
+	retrying.mu.Lock()
+	outbound = len(retrying.conns)
+	retrying.mu.Unlock()
+	inner.mu.Lock()
+	inbound = len(inner.conns)
+	inner.mu.Unlock()
+	if outbound != 0 || inbound != 0 {
+		t.Fatalf("after cascade outbound=%d inbound=%d, want 0/0", outbound, inbound)
+	}
 }

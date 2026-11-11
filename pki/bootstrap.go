@@ -42,15 +42,15 @@ func (p *FileBootstrapProvider) EnsureBootstrapMaterial(_ context.Context) (*Boo
 	if p.caCertPath == "" || p.certPath == "" || p.keyPath == "" {
 		return nil, fmt.Errorf("file bootstrap: ca_cert, cert, and key must all be set")
 	}
-	caCert, err := os.ReadFile(p.caCertPath)
+	caCert, err := os.ReadFile(p.caCertPath) // #nosec G304
 	if err != nil {
 		return nil, fmt.Errorf("file bootstrap: read CA cert: %w", err)
 	}
-	leafCert, err := os.ReadFile(p.certPath)
+	leafCert, err := os.ReadFile(p.certPath) // #nosec G304
 	if err != nil {
 		return nil, fmt.Errorf("file bootstrap: read leaf cert: %w", err)
 	}
-	leafKey, err := os.ReadFile(p.keyPath)
+	leafKey, err := os.ReadFile(p.keyPath) // #nosec G304
 	if err != nil {
 		return nil, fmt.Errorf("file bootstrap: read leaf key: %w", err)
 	}
@@ -82,9 +82,9 @@ func (p *LocalBootstrapProvider) EnsureBootstrapMaterial(_ context.Context) (*Bo
 	certPath := filepath.Join(p.dir, "ca.crt")
 	keyPath := filepath.Join(p.dir, "ca.key")
 	//nolint:gosec // paths come from operator configuration
-	if certPEM, err := os.ReadFile(certPath); err == nil {
+	if certPEM, err := os.ReadFile(certPath); err == nil { // #nosec G304
 		//nolint:gosec // paths come from operator configuration
-		if keyPEM, keyErr := os.ReadFile(keyPath); keyErr == nil {
+		if keyPEM, keyErr := os.ReadFile(keyPath); keyErr == nil { // #nosec G304
 			return &BootstrapMaterial{CACertPEM: certPEM, CAKeyPEM: keyPEM}, nil
 		}
 	}

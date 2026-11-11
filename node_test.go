@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/disaster37/raft/discovery"
 	"github.com/disaster37/raft/fsm"
 	"github.com/disaster37/raft/keyring"
+	"github.com/disaster37/raft/storage"
 	"github.com/disaster37/raft/testutil"
 )
 
@@ -102,6 +104,7 @@ func TestNewNodeInvalidConfig(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 	cfg := config.DefaultConfig()
+	cfg.PerformanceMultiplier = 0.2
 	cfg.Storage.Backend = "bad"
 	if _, err := raft.NewNode(context.Background(), &cfg, raft.NodeOptions{}); !errors.Is(err, raft.ErrInvalidConfig) {
 		t.Fatalf("err = %v", err)
@@ -112,6 +115,7 @@ func TestNewNodeSharedBolt(t *testing.T) {
 	ln := testutil.FreeListener(t)
 	addr := testutil.FreeAddrFromListener(t, ln)
 	cfg := config.DefaultConfig()
+	cfg.PerformanceMultiplier = 0.2
 	cfg.Dir = t.TempDir()
 	cfg.NodeID = "shared-node"
 	cfg.BindAddr = addr
@@ -147,6 +151,7 @@ func TestNewNodeCustomFSM(t *testing.T) {
 	ln := testutil.FreeListener(t)
 	addr := testutil.FreeAddrFromListener(t, ln)
 	cfg := config.DefaultConfig()
+	cfg.PerformanceMultiplier = 0.2
 	cfg.Dir = t.TempDir()
 	cfg.NodeID = "custom-node"
 	cfg.BindAddr = addr
@@ -175,6 +180,7 @@ func TestWaitForLeaderTimeout(t *testing.T) {
 	ln := testutil.FreeListener(t)
 	addr := testutil.FreeAddrFromListener(t, ln)
 	cfg := config.DefaultConfig()
+	cfg.PerformanceMultiplier = 0.2
 	cfg.Dir = t.TempDir()
 	cfg.NodeID = "timeout-node"
 	cfg.BindAddr = addr
@@ -222,6 +228,7 @@ func TestRemovedNodeCallback(t *testing.T) {
 	peers := []config.PeerConfig{{ID: "node-0", Address: addr0}, {ID: "node-1", Address: addr1}}
 	start := func(id, addr string, ln net.Listener, callback func()) *raft.Node {
 		cfg := config.DefaultConfig()
+		cfg.PerformanceMultiplier = 0.2
 		cfg.Dir = t.TempDir()
 		cfg.NodeID = id
 		cfg.BindAddr = addr
@@ -232,7 +239,6 @@ func TestRemovedNodeCallback(t *testing.T) {
 		cfg.Storage.Backend = config.StorageBackendInmem
 		cfg.Autopilot.Enabled = false
 		cfg.Join.Interval = time.Hour
-		cfg.PerformanceMultiplier = 1.0
 		n, err := raft.NewNode(context.Background(), &cfg, raft.NodeOptions{CustomListener: ln, RemovedCallback: callback})
 		if err != nil {
 			t.Fatalf("NewNode %s: %v", id, err)
@@ -278,6 +284,7 @@ func TestRemovedNodeCallback(t *testing.T) {
 
 func ExampleNewNode() {
 	cfg := config.DefaultConfig()
+	cfg.PerformanceMultiplier = 0.2
 	cfg.Dir = "/tmp/raft-example"
 	cfg.NodeID = "example-node"
 	cfg.BindAddr = "127.0.0.1:0"
@@ -297,6 +304,7 @@ func TestNodeMembershipAndLeadership(t *testing.T) {
 	peers := []config.PeerConfig{{ID: "node-0", Address: addr0}, {ID: "node-1", Address: addr1}}
 	start := func(id, addr string, ln net.Listener) *raft.Node {
 		cfg := config.DefaultConfig()
+		cfg.PerformanceMultiplier = 0.2
 		cfg.Dir = t.TempDir()
 		cfg.NodeID = id
 		cfg.BindAddr = addr
@@ -307,7 +315,6 @@ func TestNodeMembershipAndLeadership(t *testing.T) {
 		cfg.Storage.Backend = config.StorageBackendInmem
 		cfg.Autopilot.Enabled = false
 		cfg.Join.Interval = time.Hour
-		cfg.PerformanceMultiplier = 1.0
 		n, err := raft.NewNode(context.Background(), &cfg, raft.NodeOptions{CustomListener: ln})
 		if err != nil {
 			t.Fatalf("NewNode %s: %v", id, err)
@@ -435,6 +442,7 @@ func TestNodeNonVoter(t *testing.T) {
 	peers := []config.PeerConfig{{ID: "node-0", Address: addr0}, {ID: "node-1", Address: addr1}}
 	start := func(id, addr string, ln net.Listener) *raft.Node {
 		cfg := config.DefaultConfig()
+		cfg.PerformanceMultiplier = 0.2
 		cfg.Dir = t.TempDir()
 		cfg.NodeID = id
 		cfg.BindAddr = addr
@@ -445,7 +453,6 @@ func TestNodeNonVoter(t *testing.T) {
 		cfg.Storage.Backend = config.StorageBackendInmem
 		cfg.Autopilot.Enabled = false
 		cfg.Join.Interval = time.Hour
-		cfg.PerformanceMultiplier = 1.0
 		n, err := raft.NewNode(context.Background(), &cfg, raft.NodeOptions{CustomListener: ln})
 		if err != nil {
 			t.Fatalf("NewNode %s: %v", id, err)
@@ -475,4 +482,61 @@ func TestNodeNonVoter(t *testing.T) {
 		time.Sleep(20 * time.Millisecond)
 	}
 	t.Fatal("node-1 should be a nonvoter")
+}
+
+func TestNodeAutoLoadsAtRestKeyFromConfig(t *testing.T) {
+	ln := testutil.FreeListener(t)
+	addr := testutil.FreeAddrFromListener(t, ln)
+	cfg := config.DefaultConfig()
+	cfg.PerformanceMultiplier = 0.2
+	cfg.Dir = t.TempDir()
+	cfg.NodeID = "at-rest-node"
+	cfg.BindAddr = addr
+	cfg.AdvertiseAddr = addr
+	cfg.Storage.Backend = config.StorageBackendInmem
+	cfg.Storage.AtRestKey = "0123456789abcdef0123456789abcdef"
+	cfg.Storage.AtRestKeyInfo = storage.DefaultHKDFInfo
+	cfg.TLS.Enabled = true
+	cfg.TLS.KeyringRotationEnabled = true
+	cfg.Autopilot.Enabled = false
+	cfg.Join.Interval = 50 * time.Millisecond
+	n, err := raft.NewNode(context.Background(), &cfg, raft.NodeOptions{CustomListener: ln})
+	if err != nil {
+		t.Fatalf("NewNode: %v", err)
+	}
+	if err := n.Start(context.Background()); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	defer n.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := n.WaitForLeader(ctx); err != nil {
+		t.Fatalf("WaitForLeader: %v", err)
+	}
+	var kr *keyring.TLSKeyring
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		kr, err = n.ReadKeyring()
+		if err == nil && kr != nil && len(kr.Keys) > 0 {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if kr == nil || len(kr.Keys) == 0 {
+		t.Fatal("keyring was not seeded")
+	}
+	if !strings.Contains(kr.Keys[0].KeyPEM, `"alg":"A256GCM"`) {
+		t.Fatalf("keyring private key is not sealed: %q", kr.Keys[0].KeyPEM)
+	}
+	keeper, err := storage.DeriveAESGCMKeeper([]byte(cfg.Storage.AtRestKey), cfg.Storage.AtRestKeyInfo, cfg.Storage.AtRestKeyInfo)
+	if err != nil {
+		t.Fatalf("derive keeper: %v", err)
+	}
+	plain, err := keeper.OpenString(kr.Keys[0].KeyPEM)
+	if err != nil {
+		t.Fatalf("open sealed key: %v", err)
+	}
+	if !strings.Contains(plain, "PRIVATE KEY") {
+		t.Fatalf("unsealed key is not a PEM private key: %q", plain)
+	}
 }

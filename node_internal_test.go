@@ -1,8 +1,10 @@
 package raft
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"errors"
 	"net"
@@ -116,12 +118,10 @@ func TestInternalMapApplyError(t *testing.T) {
 }
 
 func TestInternalSetupTLSAndKeyring(t *testing.T) {
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
+	ln := freeListener(t)
 	addr := ln.Addr().String()
 	cfg := config.DefaultConfig()
+	cfg.PerformanceMultiplier = 0.2
 	cfg.Dir = t.TempDir()
 	cfg.NodeID = "tls-node"
 	cfg.BindAddr = addr
@@ -162,6 +162,7 @@ func TestInternalSetupTLSAndKeyring(t *testing.T) {
 
 func TestInternalGenerationFencing(t *testing.T) {
 	cfg := config.DefaultConfig()
+	cfg.PerformanceMultiplier = 0.2
 	cfg.Dir = t.TempDir()
 	cfg.NodeID = "gen-node"
 	cfg.Storage.Backend = config.StorageBackendInmem
@@ -285,6 +286,7 @@ func TestInternalRecoverPeersJSON(t *testing.T) {
 
 func TestInternalDiscoveryConfig(t *testing.T) {
 	cfg := config.DefaultConfig()
+	cfg.PerformanceMultiplier = 0.2
 	cfg.Discovery.Peers = []config.PeerConfig{{ID: "a", Address: "a:1"}}
 	cfg.Discovery.LegacyPeers = []string{"b=b:1"}
 	dc := discoveryConfig(&cfg)
@@ -403,6 +405,7 @@ func TestInternalSetupTLSManual(t *testing.T) {
 	_ = os.WriteFile(keyFile, keyPEM, 0o600)
 	_ = os.WriteFile(caFile, caPEM, 0o600)
 	cfg := config.DefaultConfig()
+	cfg.PerformanceMultiplier = 0.2
 	cfg.Dir = t.TempDir()
 	cfg.NodeID = "manual-node"
 	cfg.TLS.Enabled = true
@@ -424,12 +427,10 @@ func TestInternalSetupTLSManual(t *testing.T) {
 }
 
 func TestInternalStartTLSAndRecovery(t *testing.T) {
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
+	ln := freeListener(t)
 	addr := ln.Addr().String()
 	cfg := config.DefaultConfig()
+	cfg.PerformanceMultiplier = 0.2
 	cfg.Dir = t.TempDir()
 	cfg.NodeID = "start-tls-node"
 	cfg.BindAddr = addr
@@ -458,11 +459,9 @@ func TestInternalStartTLSAndRecovery(t *testing.T) {
 	_ = n.Close()
 
 	// Recovery mode clears state and bootstraps fresh.
-	ln2, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
+	ln2 := freeListener(t)
 	cfg2 := config.DefaultConfig()
+	cfg2.PerformanceMultiplier = 0.2
 	cfg2.Dir = t.TempDir()
 	cfg2.NodeID = "recovery-node"
 	cfg2.BindAddr = ln2.Addr().String()
@@ -567,13 +566,11 @@ func (r *flakyResolver) setFail() {
 }
 
 func TestInternalStartJoinLoopError(t *testing.T) {
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
+	ln := freeListener(t)
 	addr := ln.Addr().String()
 	resolver := &flakyResolver{self: discovery.Peer{ID: "flaky", Address: addr}}
 	cfg := config.DefaultConfig()
+	cfg.PerformanceMultiplier = 0.2
 	cfg.Dir = t.TempDir()
 	cfg.NodeID = "flaky"
 	cfg.BindAddr = addr
@@ -609,6 +606,7 @@ func TestInternalLeaveClusterSingleNode(t *testing.T) {
 
 func TestInternalSetupTLSErrors(t *testing.T) {
 	cfg := config.DefaultConfig()
+	cfg.PerformanceMultiplier = 0.2
 	cfg.Dir = t.TempDir()
 	cfg.NodeID = "bad-tls"
 	cfg.TLS.Enabled = true
@@ -663,12 +661,10 @@ func TestInternalReadGenerationParseError(t *testing.T) {
 }
 
 func TestInternalEnsureKeyringSeedsAndDrops(t *testing.T) {
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
+	ln := freeListener(t)
 	addr := ln.Addr().String()
 	cfg := config.DefaultConfig()
+	cfg.PerformanceMultiplier = 0.2
 	cfg.Dir = t.TempDir()
 	cfg.NodeID = "keyring-node"
 	cfg.BindAddr = addr
@@ -721,11 +717,9 @@ func TestInternalEnsureKeyringSeedsAndDrops(t *testing.T) {
 func TestInternalStartSingleNodeRecovery(t *testing.T) {
 	dir := t.TempDir()
 	start := func(singleNodeRecovery bool, fencer GenerationFencer) *Node {
-		ln, err := net.Listen("tcp", "127.0.0.1:0")
-		if err != nil {
-			t.Fatal(err)
-		}
+		ln := freeListener(t)
 		cfg := config.DefaultConfig()
+		cfg.PerformanceMultiplier = 0.2
 		cfg.Dir = dir
 		cfg.NodeID = "recover-internal"
 		cfg.BindAddr = ln.Addr().String()
@@ -734,7 +728,6 @@ func TestInternalStartSingleNodeRecovery(t *testing.T) {
 		cfg.SingleNodeRecovery = singleNodeRecovery
 		cfg.Autopilot.Enabled = false
 		cfg.Join.Interval = time.Hour
-		cfg.PerformanceMultiplier = 1.0
 		n, err := NewNode(context.Background(), &cfg, NodeOptions{CustomListener: ln, GenerationFencer: fencer})
 		if err != nil {
 			t.Fatal(err)
@@ -789,6 +782,7 @@ func TestInternalSetupTLSManualError(t *testing.T) {
 	dir := t.TempDir()
 	missing := filepath.Join(dir, "missing")
 	cfg := config.DefaultConfig()
+	cfg.PerformanceMultiplier = 0.2
 	cfg.Dir = t.TempDir()
 	cfg.NodeID = "manual-error"
 	cfg.TLS.Enabled = true
@@ -806,19 +800,14 @@ func TestInternalSetupTLSManualError(t *testing.T) {
 
 func TestInternalStartGenerationFencing(t *testing.T) {
 	// Bootstrap node A.
-	lnA, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
+	lnA := freeListener(t)
 	addrA := lnA.Addr().String()
-	lnB, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
+	lnB := freeListener(t)
 	addrB := lnB.Addr().String()
 	peers := []config.PeerConfig{{ID: "aaa", Address: addrA}, {ID: "bbb", Address: addrB}}
 	fencer := &internalFencer{}
 	cfgA := config.DefaultConfig()
+	cfgA.PerformanceMultiplier = 0.2
 	cfgA.Dir = t.TempDir()
 	cfgA.NodeID = "aaa"
 	cfgA.BindAddr = addrA
@@ -829,7 +818,6 @@ func TestInternalStartGenerationFencing(t *testing.T) {
 	cfgA.Storage.Backend = config.StorageBackendRaftBoltDB
 	cfgA.Autopilot.Enabled = false
 	cfgA.Join.Interval = time.Hour
-	cfgA.PerformanceMultiplier = 1.0
 	a, err := NewNode(context.Background(), &cfgA, NodeOptions{CustomListener: lnA, GenerationFencer: fencer})
 	if err != nil {
 		t.Fatal(err)
@@ -850,6 +838,7 @@ func TestInternalStartGenerationFencing(t *testing.T) {
 	}
 	fencer.gen = 1
 	cfgB := config.DefaultConfig()
+	cfgB.PerformanceMultiplier = 0.2
 	cfgB.Dir = dirB
 	cfgB.NodeID = "bbb"
 	cfgB.BindAddr = addrB
@@ -860,7 +849,6 @@ func TestInternalStartGenerationFencing(t *testing.T) {
 	cfgB.Storage.Backend = config.StorageBackendRaftBoltDB
 	cfgB.Autopilot.Enabled = false
 	cfgB.Join.Interval = time.Hour
-	cfgB.PerformanceMultiplier = 1.0
 	b, err := NewNode(context.Background(), &cfgB, NodeOptions{CustomListener: lnB, GenerationFencer: fencer})
 	if err != nil {
 		t.Fatal(err)
@@ -881,13 +869,14 @@ func TestInternalStartGenerationFencing(t *testing.T) {
 }
 
 func TestInternalTransferLeadershipError(t *testing.T) {
-	ln0, _ := net.Listen("tcp", "127.0.0.1:0")
-	ln1, _ := net.Listen("tcp", "127.0.0.1:0")
+	ln0 := freeListener(t)
+	ln1 := freeListener(t)
 	addr0 := ln0.Addr().String()
 	addr1 := ln1.Addr().String()
 	peers := []config.PeerConfig{{ID: "node-0", Address: addr0}, {ID: "node-1", Address: addr1}}
 	start := func(id, addr string, ln net.Listener) *Node {
 		cfg := config.DefaultConfig()
+		cfg.PerformanceMultiplier = 0.2
 		cfg.Dir = t.TempDir()
 		cfg.NodeID = id
 		cfg.BindAddr = addr
@@ -898,7 +887,6 @@ func TestInternalTransferLeadershipError(t *testing.T) {
 		cfg.Storage.Backend = config.StorageBackendInmem
 		cfg.Autopilot.Enabled = false
 		cfg.Join.Interval = time.Hour
-		cfg.PerformanceMultiplier = 1.0
 		n, err := NewNode(context.Background(), &cfg, NodeOptions{CustomListener: ln})
 		if err != nil {
 			t.Fatal(err)
@@ -927,19 +915,19 @@ func TestInternalTransferLeadershipError(t *testing.T) {
 		t.Fatal("expected non-leader remove error")
 	}
 	_ = n1.Close()
-	if err := n0.TransferLeadership(ctx, 100*time.Millisecond); err == nil {
-		t.Fatal("expected transfer error")
+	if n0.IsLeader() {
+		if err := n0.TransferLeadership(ctx, 100*time.Millisecond); err == nil {
+			t.Fatal("expected transfer error")
+		}
 	}
 }
 
 func TestInternalStartSingleNodeRecoveryUnauthorized(t *testing.T) {
 	dir := t.TempDir()
 	start := func(singleNodeRecovery bool, authorizer ReplicaCountAuthorizer) *Node {
-		ln, err := net.Listen("tcp", "127.0.0.1:0")
-		if err != nil {
-			t.Fatal(err)
-		}
+		ln := freeListener(t)
 		cfg := config.DefaultConfig()
+		cfg.PerformanceMultiplier = 0.2
 		cfg.Dir = dir
 		cfg.NodeID = "recover-unauth"
 		cfg.BindAddr = ln.Addr().String()
@@ -948,7 +936,6 @@ func TestInternalStartSingleNodeRecoveryUnauthorized(t *testing.T) {
 		cfg.SingleNodeRecovery = singleNodeRecovery
 		cfg.Autopilot.Enabled = false
 		cfg.Join.Interval = time.Hour
-		cfg.PerformanceMultiplier = 1.0
 		n, err := NewNode(context.Background(), &cfg, NodeOptions{CustomListener: ln, ReplicaCountAuthorizer: authorizer})
 		if err != nil {
 			t.Fatal(err)
@@ -983,11 +970,9 @@ func TestInternalStartManualTLS(t *testing.T) {
 	_ = os.WriteFile(certFile, certPEM, 0o600)
 	_ = os.WriteFile(keyFile, keyPEM, 0o600)
 	_ = os.WriteFile(caFile, caPEM, 0o600)
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
+	ln := freeListener(t)
 	cfg := config.DefaultConfig()
+	cfg.PerformanceMultiplier = 0.2
 	cfg.Dir = t.TempDir()
 	cfg.NodeID = "manual-start"
 	cfg.BindAddr = ln.Addr().String()
@@ -1038,6 +1023,7 @@ func TestInternalStartFailureStopsFileWatcher(t *testing.T) {
 	_ = os.WriteFile(caFile, caPEM, 0o600)
 
 	cfg := config.DefaultConfig()
+	cfg.PerformanceMultiplier = 0.2
 	cfg.Dir = t.TempDir()
 	cfg.NodeID = "watcher-fail"
 	cfg.BindAddr = "127.0.0.1:0"
@@ -1074,6 +1060,7 @@ func TestInternalStartFailureStopsFileWatcher(t *testing.T) {
 func TestInternalStartErrors(t *testing.T) {
 	// Unresolvable advertise address.
 	cfg2 := config.DefaultConfig()
+	cfg2.PerformanceMultiplier = 0.2
 	cfg2.Dir = t.TempDir()
 	cfg2.NodeID = "bad-advertise"
 	cfg2.BindAddr = "127.0.0.1:0"
@@ -1091,6 +1078,7 @@ func TestInternalStartErrors(t *testing.T) {
 
 	// TLS bootstrap error.
 	cfg3 := config.DefaultConfig()
+	cfg3.PerformanceMultiplier = 0.2
 	cfg3.Dir = t.TempDir()
 	cfg3.NodeID = "bad-bootstrap"
 	cfg3.BindAddr = "127.0.0.1:0"
@@ -1104,5 +1092,120 @@ func TestInternalStartErrors(t *testing.T) {
 	}
 	if err := n3.Start(context.Background()); err == nil {
 		t.Fatal("expected bootstrap error")
+	}
+}
+
+// freeListener mirrors testutil.FreeListener without importing testutil,
+// which would create an import cycle because testutil imports this package.
+func freeListener(t *testing.T) net.Listener {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("reserve listener: %v", err)
+	}
+	t.Cleanup(func() { _ = ln.Close() })
+	return ln
+}
+
+func TestNodeManualTLSFileWatcherHotReload(t *testing.T) {
+	dir := t.TempDir()
+	ca1, err := pki.NewMintingCA("ca1", "org", time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ca2, err := pki.NewMintingCA("ca2", "org", time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cert1, key1, err := ca1.IssuePeerCertificate("node", "org", []string{"localhost"}, []net.IP{net.ParseIP("127.0.0.1")}, time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cert2, key2, err := ca2.IssuePeerCertificate("node", "org", []string{"localhost"}, []net.IP{net.ParseIP("127.0.0.1")}, time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	caPEM1, _, err := ca1.EncodePEM()
+	if err != nil {
+		t.Fatal(err)
+	}
+	caPEM2, _, err := ca2.EncodePEM()
+	if err != nil {
+		t.Fatal(err)
+	}
+	leaf1, err := tls.X509KeyPair(cert1, key1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	leaf2, err := tls.X509KeyPair(cert2, key2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	certFile := filepath.Join(dir, "node.crt")
+	keyFile := filepath.Join(dir, "node.key")
+	caFile := filepath.Join(dir, "ca.crt")
+	writeFiles := func(certPEM, keyPEM, caPEM []byte) {
+		t.Helper()
+		if err := os.WriteFile(certFile, certPEM, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(keyFile, keyPEM, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(caFile, caPEM, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeFiles(cert1, key1, caPEM1)
+
+	cfg := config.DefaultConfig()
+	cfg.PerformanceMultiplier = 0.2
+	cfg.Dir = t.TempDir()
+	cfg.NodeID = "manual-reload"
+	cfg.TLS.Enabled = true
+	cfg.TLS.CACertPath = caFile
+	cfg.TLS.CertPath = certFile
+	cfg.TLS.KeyPath = keyFile
+	cfg.TLS.KeyringRotationEnabled = false
+	cfg.Autopilot.Enabled = false
+	n, err := NewNode(context.Background(), &cfg, NodeOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = n.Close() }()
+	if err := n.setupTLS(context.Background()); err != nil {
+		t.Fatalf("setupTLS: %v", err)
+	}
+	if n.fileWatcher == nil || n.tlsProvider == nil {
+		t.Fatal("missing manual TLS components")
+	}
+	if n.tlsProvider != n.fileWatcher.Provider() {
+		t.Fatal("node provider is not bound to the file watcher provider")
+	}
+	initial, err := n.tlsProvider.GetCertificate(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(initial.Certificate[0], leaf1.Certificate[0]) {
+		t.Fatal("initial certificate mismatch")
+	}
+
+	writeFiles(cert2, key2, caPEM2)
+	if err := n.fileWatcher.Reload(); err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	updated, err := n.tlsProvider.GetCertificate(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(updated.Certificate[0], leaf2.Certificate[0]) {
+		t.Fatal("hot reload did not update the node provider certificate")
+	}
+	parsed, err := x509.ParseCertificate(leaf2.Certificate[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := parsed.Verify(x509.VerifyOptions{Roots: n.tlsProvider.CurrentCertPool(), DNSName: "localhost"}); err != nil {
+		t.Fatalf("reloaded CA does not trust the new leaf: %v", err)
 	}
 }

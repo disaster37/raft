@@ -3,6 +3,7 @@ package storage
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -524,7 +525,7 @@ func TestLoadAESGCMKeeperErrors(t *testing.T) {
 		"primary-missing": `{"primary":"k2","keys":{"k1":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="}}`,
 	}
 	for name, content := range cases {
-		path := filepath.Join(dir, name+".json")
+		path := filepath.Join(dir, fmt.Sprintf("%s.json", name))
 		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 			t.Fatal(err)
 		}
@@ -546,5 +547,151 @@ func TestSharedBoltStoreNodeIDPathError(t *testing.T) {
 	cfg := config.DefaultConfig().Storage
 	if _, err := NewSharedBoltStore(dir, "a/b", cfg, 2, 8, nil); err == nil {
 		t.Fatal("expected open error")
+	}
+}
+
+func TestDeriveAESGCMKeyAndKeeper(t *testing.T) {
+	secret := []byte("0123456789abcdef")
+	if _, err := DeriveAESGCMKey([]byte("short"), ""); !errors.Is(err, ErrSecretTooShort) {
+		t.Fatalf("short secret err = %v", err)
+	}
+	key1, err := DeriveAESGCMKey(secret, "")
+	if err != nil {
+		t.Fatalf("derive: %v", err)
+	}
+	key2, err := DeriveAESGCMKey(secret, DefaultHKDFInfo)
+	if err != nil {
+		t.Fatalf("derive default info: %v", err)
+	}
+	if !bytes.Equal(key1, key2) {
+		t.Fatal("default info is not deterministic")
+	}
+	key3, err := DeriveAESGCMKey(secret, "other-info")
+	if err != nil {
+		t.Fatalf("derive other info: %v", err)
+	}
+	if bytes.Equal(key1, key3) {
+		t.Fatal("domain separation failed")
+	}
+
+	keeper, err := DeriveAESGCMKeeper(secret, "", "aad")
+	if err != nil {
+		t.Fatalf("derive keeper: %v", err)
+	}
+	sealed, err := keeper.SealString("secret-value")
+	if err != nil {
+		t.Fatalf("seal: %v", err)
+	}
+	opened, err := keeper.OpenString(sealed)
+	if err != nil || opened != "secret-value" {
+		t.Fatalf("open = %q err=%v", opened, err)
+	}
+	if plain, err := keeper.OpenString("plaintext"); err != nil || plain != "plaintext" {
+		t.Fatalf("lazy migration = %q err=%v", plain, err)
+	}
+
+	raw := []byte("0123456789abcdef0123456789abcdef")
+	copied, err := NewAESGCMKeeper("k1", map[string][]byte{"k1": raw}, "aad")
+	if err != nil {
+		t.Fatalf("new keeper: %v", err)
+	}
+	sealed, err = copied.SealString("value")
+	if err != nil {
+		t.Fatalf("seal copied: %v", err)
+	}
+	for i := range raw {
+		raw[i] = 0
+	}
+	if opened, err := copied.OpenString(sealed); err != nil || opened != "value" {
+		t.Fatalf("defensive copy failed: %q err=%v", opened, err)
+	}
+}
+
+func TestLoadOrDeriveAESGCMKeeperMalformedJSONKeyFile(t *testing.T) {
+	dir := t.TempDir()
+	// A JSON key file with a bad base64 key must surface its validation error
+	// rather than being silently re-derived as a raw secret (which would
+	// produce a different key and make existing ciphertext undecryptable).
+	badJSON := filepath.Join(dir, "bad.json")
+	if err := os.WriteFile(badJSON, []byte(`{"primary":"k1","keys":{"k1":"!!!"}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadOrDeriveAESGCMKeeper(config.StorageConfig{AtRestKeyFile: badJSON}); err == nil {
+		t.Fatal("expected malformed JSON key file error")
+	}
+	shortJSON := filepath.Join(dir, "short.json")
+	if err := os.WriteFile(shortJSON, []byte(`{"primary":"k1","keys":{"k1":"AAAA"}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadOrDeriveAESGCMKeeper(config.StorageConfig{AtRestKeyFile: shortJSON}); err == nil {
+		t.Fatal("expected short JSON key error")
+	}
+	missingPrimary := filepath.Join(dir, "missing-primary.json")
+	if err := os.WriteFile(missingPrimary, []byte(`{"keys":{"k1":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadOrDeriveAESGCMKeeper(config.StorageConfig{AtRestKeyFile: missingPrimary}); err == nil {
+		t.Fatal("expected missing primary error")
+	}
+}
+
+func TestLoadOrDeriveAESGCMKeeper(t *testing.T) {
+	dir := t.TempDir()
+	jsonPath := filepath.Join(dir, "keys.json")
+	if err := GenerateKeyFile(jsonPath); err != nil {
+		t.Fatalf("generate key file: %v", err)
+	}
+	rawPath := filepath.Join(dir, "secret.txt")
+	if err := os.WriteFile(rawPath, []byte("0123456789abcdef\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	shortPath := filepath.Join(dir, "short.txt")
+	if err := os.WriteFile(shortPath, []byte("short\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		name    string
+		cfg     config.StorageConfig
+		wantNil bool
+		wantErr bool
+	}{
+		{name: "json file", cfg: config.StorageConfig{AtRestKeyFile: jsonPath, AtRestKeyInfo: "info"}},
+		{name: "raw file", cfg: config.StorageConfig{AtRestKeyFile: rawPath, AtRestKeyInfo: "info"}},
+		{name: "raw key", cfg: config.StorageConfig{AtRestKey: "0123456789abcdef", AtRestKeyInfo: "info"}},
+		{name: "none", cfg: config.StorageConfig{}, wantNil: true},
+		{name: "short key", cfg: config.StorageConfig{AtRestKey: "short"}, wantErr: true},
+		{name: "short file", cfg: config.StorageConfig{AtRestKeyFile: shortPath}, wantErr: true},
+		{name: "missing file", cfg: config.StorageConfig{AtRestKeyFile: filepath.Join(dir, "missing")}, wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			keeper, err := LoadOrDeriveAESGCMKeeper(tt.cfg)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("expected error")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if tt.wantNil {
+				if keeper != nil {
+					t.Fatal("expected nil keeper")
+				}
+				return
+			}
+			if keeper == nil {
+				t.Fatal("expected keeper")
+			}
+			sealed, err := keeper.SealString("value")
+			if err != nil {
+				t.Fatalf("seal: %v", err)
+			}
+			if opened, err := keeper.OpenString(sealed); err != nil || opened != "value" {
+				t.Fatalf("open = %q err=%v", opened, err)
+			}
+		})
 	}
 }

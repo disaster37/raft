@@ -22,7 +22,7 @@ func EnsureDir0700(dir string) error {
 		return fmt.Errorf("mkdir %s: %w", dir, err)
 	}
 	//nolint:gosec // directory permissions are intentionally 0700
-	if err := os.Chmod(dir, 0o700); err != nil && !errors.Is(err, os.ErrPermission) {
+	if err := os.Chmod(dir, 0o700); err != nil && !errors.Is(err, os.ErrPermission) { // #nosec G302
 		return fmt.Errorf("chmod %s: %w", dir, err)
 	}
 	return nil

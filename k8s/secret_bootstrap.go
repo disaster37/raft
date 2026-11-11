@@ -175,12 +175,12 @@ func (p *SecretBootstrapProvider) cache(mat *pki.BootstrapMaterial) error {
 // ReadCachedMaterial loads cached CA material from dir, if present.
 func ReadCachedMaterial(dir string) (*pki.BootstrapMaterial, error) {
 	//nolint:gosec // fixed cache file under the configured cache dir
-	certPEM, err := os.ReadFile(filepath.Join(dir, "ca.crt"))
+	certPEM, err := os.ReadFile(filepath.Join(dir, "ca.crt")) // #nosec G304
 	if err != nil {
 		return nil, err
 	}
 	//nolint:gosec // fixed cache file under the configured cache dir
-	keyPEM, err := os.ReadFile(filepath.Join(dir, "ca.key"))
+	keyPEM, err := os.ReadFile(filepath.Join(dir, "ca.key")) // #nosec G304
 	if err != nil {
 		return nil, err
 	}

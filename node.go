@@ -83,9 +83,10 @@ type Node struct {
 	rotator           *keyring.PhasedRotator
 	bootstrap         *pki.BootstrapMaterial
 
-	ctx    context.Context
-	cancel context.CancelFunc
-	wg     sync.WaitGroup
+	ctx     context.Context
+	cancel  context.CancelFunc
+	wg      sync.WaitGroup
+	tempDir string
 
 	closeOnce sync.Once
 	closeErr  error
@@ -145,8 +146,14 @@ func NewInmemNode(nodeID string, userFSM hraft.FSM, applyTimeout time.Duration, 
 		return nil, fmt.Errorf("reserve inmem listener: %w", err)
 	}
 	addr := ln.Addr().String()
+	tmpDir, err := os.MkdirTemp("", fmt.Sprintf("raft-inmem-%s-*", nodeID))
+	if err != nil {
+		_ = ln.Close()
+		return nil, fmt.Errorf("create inmem temp dir: %w", err)
+	}
 	cfg := config.DefaultConfig()
-	cfg.Dir = filepath.Join(os.TempDir(), fmt.Sprintf("raft-inmem-%s", nodeID))
+	cfg.Dir = tmpDir
+	cfg.PerformanceMultiplier = 0.1
 	cfg.NodeID = nodeID
 	cfg.BindAddr = addr
 	cfg.AdvertiseAddr = addr
@@ -161,10 +168,13 @@ func NewInmemNode(nodeID string, userFSM hraft.FSM, applyTimeout time.Duration, 
 	n, err := NewNode(context.Background(), &cfg, NodeOptions{FSM: userFSM, Logger: logger, CustomListener: ln})
 	if err != nil {
 		_ = ln.Close()
+		_ = os.RemoveAll(tmpDir)
 		return nil, err
 	}
+	n.tempDir = tmpDir
 	if err := n.Start(context.Background()); err != nil {
 		_ = ln.Close()
+		_ = n.Close()
 		return nil, err
 	}
 	waitCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -198,7 +208,7 @@ func (n *Node) Start(ctx context.Context) (err error) {
 		return fmt.Errorf("mkdir data dir %s: %w", dir, err)
 	}
 	//nolint:gosec // data directory permissions are intentionally 0700
-	if err := os.Chmod(dir, 0o700); err != nil && !os.IsPermission(err) {
+	if err := os.Chmod(dir, 0o700); err != nil && !os.IsPermission(err) { // #nosec G302
 		return fmt.Errorf("chmod data dir %s: %w", dir, err)
 	}
 
@@ -218,6 +228,16 @@ func (n *Node) Start(ctx context.Context) (err error) {
 			return fmt.Errorf("clear raft state: %w", err)
 		}
 		n.logger.Warn("cleared stale raft state", map[string]any{"dir": dir, "recovery": true})
+	}
+
+	if n.opts.Sealer == nil {
+		sealer, err := storage.LoadOrDeriveAESGCMKeeper(n.cfg.Storage)
+		if err != nil {
+			return fmt.Errorf("init at-rest sealer: %w", err)
+		}
+		if sealer != nil {
+			n.opts.Sealer = sealer
+		}
 	}
 
 	if err := n.setupTLS(ctx); err != nil {
@@ -408,37 +428,13 @@ func (n *Node) setupTLS(ctx context.Context) error {
 		return fmt.Errorf("parse bootstrap CA: %w", err)
 	}
 
-	var leaf tls.Certificate
-	if len(mat.LeafCertPEM) > 0 && len(mat.LeafKeyPEM) > 0 {
-		leaf, err = tls.X509KeyPair(mat.LeafCertPEM, mat.LeafKeyPEM)
-		if err != nil {
-			return fmt.Errorf("parse bootstrap leaf: %w", err)
-		}
-	} else {
-		if len(mat.CAKeyPEM) == 0 {
-			return fmt.Errorf("bootstrap material has neither a leaf nor a CA private key")
-		}
-		ca, err := pki.NewMintingCAFromPEM(mat.CACertPEM, mat.CAKeyPEM, n.cfg.TLS.Validity)
-		if err != nil {
-			return fmt.Errorf("load bootstrap CA: %w", err)
-		}
-		certPEM, keyPEM, err := pki.IssueOrReuseNodeCert(tlsDir, ca, n.commonName(), n.cfg.TLS.Organization, n.dnsNames(), n.ipAddrs(), n.cfg.TLS.Validity, n.cfg.TLS.SafetyMargin)
-		if err != nil {
-			return err
-		}
-		leaf, err = tls.X509KeyPair(certPEM, keyPEM)
-		if err != nil {
-			return fmt.Errorf("parse node leaf: %w", err)
-		}
-	}
-	n.tlsProvider = transport.NewDynamicTLSProvider(leaf, pool, pool, n.cfg.TLS.ClientAuth)
-
 	if manual {
 		watcher, err := transport.NewFileWatcher(n.cfg.TLS.CertPath, n.cfg.TLS.KeyPath, n.cfg.TLS.CACertPath, n.cfg.TLS.ReloadPollInterval, pki.DefaultSafetyMargin, n.cfg.TLS.ClientAuth, n.logger)
 		if err != nil {
 			return fmt.Errorf("start file watcher: %w", err)
 		}
 		n.fileWatcher = watcher
+		n.tlsProvider = watcher.Provider()
 		watcherCtx, watcherCancel := context.WithCancel(n.ctx)
 		n.fileWatcherCancel = watcherCancel
 		n.wg.Add(1)
@@ -446,6 +442,31 @@ func (n *Node) setupTLS(ctx context.Context) error {
 			defer n.wg.Done()
 			watcher.Start(watcherCtx)
 		}()
+	} else {
+		var leaf tls.Certificate
+		if len(mat.LeafCertPEM) > 0 && len(mat.LeafKeyPEM) > 0 {
+			leaf, err = tls.X509KeyPair(mat.LeafCertPEM, mat.LeafKeyPEM)
+			if err != nil {
+				return fmt.Errorf("parse bootstrap leaf: %w", err)
+			}
+		} else {
+			if len(mat.CAKeyPEM) == 0 {
+				return fmt.Errorf("bootstrap material has neither a leaf nor a CA private key")
+			}
+			ca, err := pki.NewMintingCAFromPEM(mat.CACertPEM, mat.CAKeyPEM, n.cfg.TLS.Validity)
+			if err != nil {
+				return fmt.Errorf("load bootstrap CA: %w", err)
+			}
+			certPEM, keyPEM, err := pki.IssueOrReuseNodeCert(tlsDir, ca, n.commonName(), n.cfg.TLS.Organization, n.dnsNames(), n.ipAddrs(), n.cfg.TLS.Validity, n.cfg.TLS.SafetyMargin)
+			if err != nil {
+				return err
+			}
+			leaf, err = tls.X509KeyPair(certPEM, keyPEM)
+			if err != nil {
+				return fmt.Errorf("parse node leaf: %w", err)
+			}
+		}
+		n.tlsProvider = transport.NewDynamicTLSProvider(leaf, pool, pool, n.cfg.TLS.ClientAuth)
 	}
 
 	manager, err := keyring.NewManager(keyring.ManagerConfig{
@@ -580,9 +601,16 @@ func (n *Node) ipAddrs() []net.IP {
 func discoveryConfig(cfg *config.Config) *discovery.Config {
 	peers := make([]discovery.Peer, 0, len(cfg.Discovery.Peers))
 	for _, p := range cfg.Discovery.Peers {
-		peers = append(peers, discovery.Peer{ID: p.ID, Address: p.Address})
+		peers = append(peers, discovery.Peer{ID: p.ID, Address: p.Address, NonVoter: p.NonVoter})
 	}
 	peers = append(peers, discovery.ParseLegacyPeers(cfg.Discovery.LegacyPeers)...)
+	if cfg.NonVoter {
+		for i := range peers {
+			if (cfg.NodeID != "" && peers[i].ID == cfg.NodeID) || (cfg.AdvertiseAddr != "" && peers[i].Address == cfg.AdvertiseAddr) {
+				peers[i].NonVoter = true
+			}
+		}
+	}
 	hostname, _ := os.Hostname()
 	return &discovery.Config{
 		NodeID:          cfg.NodeID,
@@ -600,12 +628,19 @@ func discoveryConfig(cfg *config.Config) *discovery.Config {
 }
 
 func applyPerformanceMultiplier(cfg *hraft.Config, multiplier float64) {
-	if multiplier < 1.0 {
+	if multiplier <= 0 {
 		multiplier = 1.0
 	}
-	cfg.ElectionTimeout = time.Duration(float64(cfg.ElectionTimeout) * multiplier)
-	cfg.HeartbeatTimeout = time.Duration(float64(cfg.HeartbeatTimeout) * multiplier)
-	cfg.LeaderLeaseTimeout = time.Duration(float64(cfg.LeaderLeaseTimeout) * multiplier)
+	scale := func(d time.Duration) time.Duration {
+		scaled := time.Duration(float64(d) * multiplier)
+		if scaled < 5*time.Millisecond {
+			return 5 * time.Millisecond
+		}
+		return scaled
+	}
+	cfg.ElectionTimeout = scale(cfg.ElectionTimeout)
+	cfg.HeartbeatTimeout = scale(cfg.HeartbeatTimeout)
+	cfg.LeaderLeaseTimeout = scale(cfg.LeaderLeaseTimeout)
 }
 
 // WaitForLeader blocks until a leader exists.
@@ -867,6 +902,9 @@ func (n *Node) Close() error {
 		}
 		if n.backend != nil {
 			_ = n.backend.Close()
+		}
+		if n.tempDir != "" {
+			_ = os.RemoveAll(n.tempDir)
 		}
 	})
 	return n.closeErr

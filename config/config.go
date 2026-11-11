@@ -76,8 +76,9 @@ type DiscoveryConfig struct {
 
 // PeerConfig is one explicit peer entry.
 type PeerConfig struct {
-	ID      string `mapstructure:"id" yaml:"id"`
-	Address string `mapstructure:"address" yaml:"address"`
+	ID       string `mapstructure:"id" yaml:"id"`
+	Address  string `mapstructure:"address" yaml:"address"`
+	NonVoter bool   `mapstructure:"non_voter" yaml:"non_voter"`
 }
 
 // TransportConfig controls the Raft network transport.
@@ -121,6 +122,8 @@ type StorageConfig struct {
 	NoFreelistSync  bool               `mapstructure:"no_freelist_sync" yaml:"no_freelist_sync"`
 	InitialMmapSize int                `mapstructure:"initial_mmap_size" yaml:"initial_mmap_size"`
 	AtRestKeyFile   string             `mapstructure:"at_rest_key_file" yaml:"at_rest_key_file"`
+	AtRestKey       string             `mapstructure:"at_rest_key" yaml:"at_rest_key"`
+	AtRestKeyInfo   string             `mapstructure:"at_rest_key_info" yaml:"at_rest_key_info"`
 }
 
 // AutopilotConfig controls dead-server cleanup and follower tracking.

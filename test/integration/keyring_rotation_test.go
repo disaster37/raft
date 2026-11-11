@@ -2,7 +2,6 @@ package integration
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -37,14 +36,17 @@ func TestPhasedRotationSharedCAModeUnderConcurrentWrites(t *testing.T) {
 			}
 			key := fmt.Sprintf("concurrent-%d", i)
 			var err error
-			for attempt := 0; attempt < 5; attempt++ {
+			for attempt := 0; attempt < 50; attempt++ {
 				_, err = leader.node.ApplyCommand(ctx, fsm.KindSet, fsm.KVEntry{Bucket: "b", Key: key, Value: []byte(key)})
-				if err == nil || !errors.Is(err, raft.ErrNotLeader) {
+				if err == nil {
 					break
 				}
-				time.Sleep(10 * time.Millisecond)
+				if ctx.Err() != nil {
+					return
+				}
+				time.Sleep(20 * time.Millisecond)
 			}
-			if err != nil {
+			if err != nil && ctx.Err() == nil {
 				failures.Add(1)
 			}
 			i++

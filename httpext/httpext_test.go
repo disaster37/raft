@@ -1,13 +1,17 @@
 package httpext
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -352,4 +356,142 @@ func TestStripForwardMarkerDefault(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	req.Header.Set("X-Raft-Leader-Forwarded", "1")
 	handler.ServeHTTP(rec, req)
+}
+
+func TestProbeStatusHelpers(t *testing.T) {
+	tests := []struct {
+		name string
+		call func() (int, string)
+		code int
+		body string
+	}{
+		{"ready", func() (int, string) { return ReadyzStatus(fakeReadiness{clean: true}) }, http.StatusOK, "ok"},
+		{"not ready", func() (int, string) { return ReadyzStatus(fakeReadiness{}) }, http.StatusServiceUnavailable, "not ready"},
+		{"nil ready", func() (int, string) { return ReadyzStatus(nil) }, http.StatusServiceUnavailable, "not ready"},
+		{"started", func() (int, string) { return StartupStatus(fakeReadiness{started: true}) }, http.StatusOK, "ok"},
+		{"not started", func() (int, string) { return StartupStatus(fakeReadiness{}) }, http.StatusServiceUnavailable, "not started"},
+		{"nil started", func() (int, string) { return StartupStatus(nil) }, http.StatusServiceUnavailable, "not started"},
+		{"live", LivezStatus, http.StatusOK, "ok"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			code, body := tt.call()
+			if code != tt.code || body != tt.body {
+				t.Fatalf("status = %d %q, want %d %q", code, body, tt.code, tt.body)
+			}
+		})
+	}
+}
+
+func TestForwarderFrameworkAgnostic(t *testing.T) {
+	leader := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("X-Test-Forwarded") != "1" {
+			t.Errorf("missing loop-prevention header")
+		}
+		if r.Header.Get("X-Remove") != "" {
+			t.Errorf("Connection token header was not stripped")
+		}
+		if r.Header.Get("Keep-Alive") != "" {
+			t.Errorf("hop-by-hop header was not stripped")
+		}
+		if r.Header.Get("X-Keep") != "yes" {
+			t.Errorf("end-to-end header was stripped")
+		}
+		body, _ := io.ReadAll(r.Body)
+		w.Header().Set("X-Leader", "yes")
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write(append([]byte("leader:"), body...))
+	}))
+	defer leader.Close()
+	_, portStr, _ := net.SplitHostPort(leader.Listener.Addr().String())
+	port, _ := strconv.Atoi(portStr)
+
+	cfg := LeaderForwardConfig{
+		LeaderInfo: fakeLeader{addr: leader.Listener.Addr().String()},
+		TargetPort: port,
+		Scheme:     "http",
+		HeaderName: "X-Test-Forwarded",
+	}
+	fwd := NewForwarder(cfg)
+	if fwd.Client() == nil || fwd.HeaderName() != "X-Test-Forwarded" || fwd.Scheme() != "http" {
+		t.Fatalf("forwarder accessors = %v %q %q", fwd.Client(), fwd.HeaderName(), fwd.Scheme())
+	}
+	if !fwd.ShouldForward(http.MethodPost, "/write", "") {
+		t.Fatal("POST should forward")
+	}
+	if fwd.ShouldForward(http.MethodGet, "/read", "") {
+		t.Fatal("GET should not forward")
+	}
+	if fwd.ShouldForward(http.MethodPost, "/write", "1") {
+		t.Fatal("loop header should prevent forwarding")
+	}
+	if NewForwarder(LeaderForwardConfig{}).ShouldForward(http.MethodPost, "/write", "") {
+		t.Fatal("nil leader should not forward")
+	}
+	if NewForwarder(LeaderForwardConfig{LeaderInfo: fakeLeader{leader: true}}).ShouldForward(http.MethodPost, "/write", "") {
+		t.Fatal("leader should not forward")
+	}
+	pinned := NewForwarder(LeaderForwardConfig{
+		LeaderInfo:    fakeLeader{},
+		PinnedRouteFn: func(method, path string) bool { return method == http.MethodGet && path == "/pinned" },
+	})
+	if !pinned.ShouldForward(http.MethodGet, "/pinned", "") {
+		t.Fatal("pinned GET should forward")
+	}
+
+	if _, _, err := NewForwarder(LeaderForwardConfig{}).Target(); !errors.Is(err, ErrNoLeader) {
+		t.Fatalf("no leader err = %v", err)
+	}
+	if _, _, err := NewForwarder(LeaderForwardConfig{LeaderInfo: fakeLeader{addr: "bad"}}).Target(); !errors.Is(err, ErrInvalidLeaderAddr) {
+		t.Fatalf("invalid leader err = %v", err)
+	}
+	scheme, hostPort, err := fwd.Target()
+	if err != nil || scheme != "http" || hostPort != leader.Listener.Addr().String() {
+		t.Fatalf("target = %q %q err=%v", scheme, hostPort, err)
+	}
+	targetURL, err := fwd.TargetURL("/api/v1/traces?x=1")
+	if err != nil || targetURL != fmt.Sprintf("http://%s/api/v1/traces?x=1", leader.Listener.Addr().String()) {
+		t.Fatalf("target url = %q err=%v", targetURL, err)
+	}
+
+	header := http.Header{}
+	header.Set("Connection", "X-Remove")
+	header.Set("X-Remove", "1")
+	header.Set("Keep-Alive", "timeout=5")
+	header.Set("X-Keep", "yes")
+	resp, err := fwd.Forward(context.Background(), &ForwardRequest{
+		Method:     http.MethodPost,
+		RequestURI: "/api/v1/traces?x=1",
+		Header:     header,
+		Body:       strings.NewReader("payload"),
+	})
+	if err != nil {
+		t.Fatalf("forward: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
+	if resp.StatusCode != http.StatusCreated || string(body) != "leader:payload" {
+		t.Fatalf("response = %d %q", resp.StatusCode, body)
+	}
+	if resp.Header.Get("X-Leader") != "yes" {
+		t.Fatalf("response header = %v", resp.Header)
+	}
+	if _, err := fwd.Forward(context.Background(), nil); err == nil {
+		t.Fatal("nil request should fail")
+	}
+	if _, err := NewForwarder(LeaderForwardConfig{}).Forward(context.Background(), &ForwardRequest{Method: http.MethodPost}); !errors.Is(err, ErrNoLeader) {
+		t.Fatalf("forward no leader err = %v", err)
+	}
+
+	headers := HopByHopHeaders()
+	if len(headers) == 0 || !IsHopByHopHeader("connection") || IsHopByHopHeader("X-Keep") {
+		t.Fatalf("hop-by-hop helpers = %v", headers)
+	}
+	headers[0] = "mutated"
+	if HopByHopHeaders()[0] == "mutated" {
+		t.Fatal("HopByHopHeaders did not return a copy")
+	}
 }

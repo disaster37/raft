@@ -3,6 +3,7 @@ package observ
 import (
 	"bytes"
 	"io"
+	"log"
 	"strings"
 	"testing"
 
@@ -115,4 +116,66 @@ func TestPrometheusMetrics(t *testing.T) {
 	noop.SetKeyringTerm(0)
 	noop.SetKeyringActiveKeyAgeSeconds(0)
 	noop.IncKeyringRotations("")
+}
+
+func TestStdlibAdapter(t *testing.T) {
+	var buf bytes.Buffer
+	adapter := NewStdlibAdapter(log.New(&buf, "", 0))
+	adapter.Debug("debug", map[string]any{"b": 2, "a": 1})
+	adapter.Info("info", nil)
+	adapter.Warn("warn", map[string]any{"k": "v"})
+	adapter.Error("error", io.EOF, map[string]any{"z": true})
+	out := buf.String()
+	for _, want := range []string{"level=DEBUG", "a=1 b=2", "level=INFO", "level=WARN", "k=v", "level=ERROR", "error=EOF", "z=true"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("output %q missing %q", out, want)
+		}
+	}
+	if strings.Index(out, "a=1") > strings.Index(out, "b=2") {
+		t.Fatalf("fields are not sorted: %q", out)
+	}
+	noop := NewStdlibAdapter(nil)
+	noop.Debug("x", nil)
+	noop.Info("x", nil)
+	noop.Warn("x", nil)
+	noop.Error("x", nil, nil)
+}
+
+func TestPrometheusMetricsReusesExistingCollectors(t *testing.T) {
+	reg := prometheus.NewRegistry()
+	_ = NewPrometheusMetrics(reg)
+	second := NewPrometheusMetrics(reg)
+	second.UpdateFromRaftStats(map[string]string{"state": "Leader", "term": "7"})
+	second.IncLeaderChanges()
+	second.ObserveFollowerHeartbeat("n1", 42)
+
+	families, err := reg.Gather()
+	if err != nil {
+		t.Fatalf("gather: %v", err)
+	}
+	values := map[string]float64{}
+	for _, family := range families {
+		if len(family.GetMetric()) == 0 {
+			continue
+		}
+		metric := family.GetMetric()[0]
+		switch {
+		case metric.GetGauge() != nil:
+			values[family.GetName()] = metric.GetGauge().GetValue()
+		case metric.GetCounter() != nil:
+			values[family.GetName()] = metric.GetCounter().GetValue()
+		}
+	}
+	if values["raft_state"] != 2 {
+		t.Fatalf("raft_state = %v", values["raft_state"])
+	}
+	if values["raft_term"] != 7 {
+		t.Fatalf("raft_term = %v", values["raft_term"])
+	}
+	if values["raft_leader_changes_total"] != 1 {
+		t.Fatalf("raft_leader_changes_total = %v", values["raft_leader_changes_total"])
+	}
+	if values["raft_follower_heartbeat_age_ms"] != 42 {
+		t.Fatalf("raft_follower_heartbeat_age_ms = %v", values["raft_follower_heartbeat_age_ms"])
+	}
 }
